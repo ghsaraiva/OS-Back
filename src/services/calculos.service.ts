@@ -384,18 +384,18 @@ export class CalculosService {
     });
 
     const total = records.length;
-    const abertos = records.filter((r) => r.situacao === 'Aberto').length;
-    const concluidos = records.filter((r) => r.situacao === 'Técnico Finalizado').length;
+    const abertos = records.filter((r: any) => r.situacao === 'Aberto').length;
+    const concluidos = records.filter((r: any) => r.situacao === 'Técnico Finalizado').length;
     const uniqueClientNames = new Set(
       records
-        .map((r) => r.nome_cliente ? r.nome_cliente.trim().toLowerCase() : '')
+        .map((r: any) => r.nome_cliente ? r.nome_cliente.trim().toLowerCase() : '')
         .filter(Boolean)
     );
     const clientes = uniqueClientNames.size;
 
     // Calcular dados demográficos
     const stats: Record<string, number> = {};
-    records.forEach((r) => {
+    records.forEach((r: any) => {
       if (r.estado) {
         const estado = r.estado.toUpperCase();
         stats[estado] = (stats[estado] || 0) + 1;

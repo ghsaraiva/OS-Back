@@ -187,7 +187,7 @@ export class CalculosController {
 
   obterCidade = async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await calculosService.obterCidadePorId(req.pb!, id);
       return res.json(result);
     } catch (error: any) {
@@ -197,17 +197,7 @@ export class CalculosController {
 
   obterOrcamento = async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
-      const result = await calculosService.obterOrcamentoPorId(req.pb!, id);
-      return res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Erro ao obter orçamento' });
-    }
-  };
-
-  obterOrcamento = async (req: Request, res: Response) => {
-    try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await calculosService.obterOrcamentoPorId(req.pb!, id);
       return res.json(result);
     } catch (error: any) {
@@ -217,7 +207,7 @@ export class CalculosController {
 
   atualizarOrcamento = async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const result = await calculosService.atualizarOrcamentoParcial(req.pb!, id, req.body);
       return res.json(result);
     } catch (error: any) {
