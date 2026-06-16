@@ -39,11 +39,10 @@ export class CalculosService {
     };
   }
 
-  async calcularDimensionamentoMinimo(input: DimensionamentoMinimoInput): Promise<DimensionamentoMinimoOutput> {
+  async calcularDimensionamentoMinimo(pbInstance: any, input: DimensionamentoMinimoInput): Promise<DimensionamentoMinimoOutput> {
     const { id_cidade, consumo_mes, valor_tarifa } = input;
-    await authenticatePB();
 
-    const record = await pb.collection('cidades_hsp').getOne(id_cidade);
+    const record = await pbInstance.collection('cidades_hsp').getOne(id_cidade);
 
     if (!record) {
       throw new Error('HSP não encontrado para esta localidade');
@@ -142,10 +141,6 @@ export class CalculosService {
       media_mes_kwh: Number(media_mes_kwh.toFixed(2))
     };
     
-    console.log('\n--- [DEBUG] RETORNO SISTEMA (Backend -> Front) ---');
-    console.log(JSON.stringify(result, null, 2));
-    console.log('--------------------------------------------------\n');
-
     return result;
   }
 
@@ -202,11 +197,10 @@ export class CalculosService {
     };
   }
 
-  async criarSolicitacaoInicial(input: CriarSolicitacaoInput): Promise<any> {
+  async criarSolicitacaoInicial(pbInstance: any, input: CriarSolicitacaoInput): Promise<any> {
     const { id_cidade, consumo_mes, valor_tarifa } = input;
-    await authenticatePB();
 
-    const recordCidade = await pb.collection('cidades_hsp').getOne(id_cidade);
+    const recordCidade = await pbInstance.collection('cidades_hsp').getOne(id_cidade);
 
     if (!recordCidade) {
       throw new Error('Localidade não encontrada para cálculo de HSP.');
@@ -221,11 +215,11 @@ export class CalculosService {
       situacao: 'Aberto'
     };
 
-    const record = await pb.collection('orcamentos').create(payload);
+    const record = await pbInstance.collection('orcamentos').create(payload);
     return record;
   }
 
-  async salvarRefinamentoGerencial(input: SalvarRefinamentoInput): Promise<any> {
+  async salvarRefinamentoGerencial(pbInstance: any, input: SalvarRefinamentoInput): Promise<any> {
     const { 
       orcamentoId,
       potencia_painel,
@@ -280,19 +274,34 @@ export class CalculosService {
       composicao_2,
       composicao_3,
       composicao_4,
-      composicao_5
+      composicao_5,
+      nome_cliente,
+      id_cidade,
+      cidade,
+      estado,
+      estrutura,
+      padrao,
+      consumo_mes,
+      valor_tarifa
     } = input;
 
-    await authenticatePB();
-
-    const orcamentoOriginal = await pb.collection('orcamentos').getOne(orcamentoId);
+    const orcamentoOriginal = await pbInstance.collection('orcamentos').getOne(orcamentoId);
     if (!orcamentoOriginal) {
       throw new Error('Orçamento não encontrado.');
     }
 
-    const composicao1 = `${quantidade_paineis} Painéis, ${marca_modulo}, ${kwp_sistema.toFixed(2)} kWp`;
+    const kwpSistemaVal = typeof kwp_sistema === 'number' ? kwp_sistema : (parseFloat(kwp_sistema) || 0);
+    const composicao1 = `${quantidade_paineis} Painéis, ${marca_modulo}, ${kwpSistemaVal.toFixed(2)} kWp`;
 
     const payloadPocketBase = {
+      nome_cliente: nome_cliente !== undefined ? nome_cliente : orcamentoOriginal.nome_cliente,
+      id_cidade: id_cidade !== undefined ? id_cidade : orcamentoOriginal.id_cidade,
+      cidade: cidade !== undefined ? cidade : orcamentoOriginal.cidade,
+      estado: estado !== undefined ? estado : orcamentoOriginal.estado,
+      estrutura: estrutura !== undefined ? estrutura : orcamentoOriginal.estrutura,
+      padrao: padrao !== undefined ? padrao : orcamentoOriginal.padrao,
+      consumo_mes: consumo_mes !== undefined ? consumo_mes : orcamentoOriginal.consumo_mes,
+      valor_tarifa: valor_tarifa !== undefined ? valor_tarifa : orcamentoOriginal.valor_tarifa,
       potencia_painel,
       qtd_paineis: quantidade_paineis,
       peso_painel,
@@ -357,12 +366,11 @@ export class CalculosService {
       composicao_5
     };
 
-    const registroAtualizado = await pb.collection('orcamentos').update(orcamentoId, payloadPocketBase);
+    const registroAtualizado = await pbInstance.collection('orcamentos').update(orcamentoId, payloadPocketBase);
     return registroAtualizado;
   }
 
-  async obterMetricasDashboard(userId?: string, isAdmin?: boolean): Promise<any> {
-    await authenticatePB();
+  async obterMetricasDashboard(pbInstance: any, userId?: string, isAdmin?: boolean): Promise<any> {
     
     let filter = '';
     if (!isAdmin && userId) {
@@ -370,7 +378,7 @@ export class CalculosService {
     }
 
     // Buscamos apenas os campos necessários (id, situacao, nome_cliente, estado) para poupar rede/banco
-    const records = await pb.collection('orcamentos').getFullList({
+    const records = await pbInstance.collection('orcamentos').getFullList({
       filter,
       fields: 'id,situacao,nome_cliente,estado,user_id'
     });
@@ -378,7 +386,12 @@ export class CalculosService {
     const total = records.length;
     const abertos = records.filter((r) => r.situacao === 'Aberto').length;
     const concluidos = records.filter((r) => r.situacao === 'Técnico Finalizado').length;
-    const clientes = new Set(records.map((r) => r.nome_cliente)).size;
+    const uniqueClientNames = new Set(
+      records
+        .map((r) => r.nome_cliente ? r.nome_cliente.trim().toLowerCase() : '')
+        .filter(Boolean)
+    );
+    const clientes = uniqueClientNames.size;
 
     // Calcular dados demográficos
     const stats: Record<string, number> = {};
@@ -407,6 +420,59 @@ export class CalculosService {
       },
       demographics
     };
+  }
+
+  async obterTodosUsuarios(pbInstance: any): Promise<any> {
+    const records = await pbInstance.collection('users').getFullList();
+    return records;
+  }
+
+  async listarTodosOrcamentos(pbInstance: any, userId?: string, isAdmin?: boolean): Promise<any> {
+    let filter = '';
+    if (!isAdmin && userId) {
+      filter = `user_id = "${userId}"`;
+    }
+    const records = await pbInstance.collection('orcamentos').getFullList({
+      sort: '-created',
+      expand: 'user_id',
+      filter
+    });
+    return records;
+  }
+
+  async obterCidadesHSP(pbInstance: any, search?: string): Promise<any> {
+    let filter = '';
+    if (search) {
+      const lowerSearch = search.trim().toLowerCase();
+      filter = pbInstance.filter('cidade ~ {:search} || estado ~ {:search}', { search: lowerSearch });
+    }
+    const records = await pbInstance.collection('cidades_hsp').getFullList({
+      filter,
+      sort: 'cidade'
+    });
+    return records;
+  }
+
+  async obterOrcamentoPorId(pbInstance: any, id: string): Promise<any> {
+    const record = await pbInstance.collection('orcamentos').getOne(id, {
+      expand: 'user_id'
+    });
+    return record;
+  }
+
+  async criarNovoUsuario(pbInstance: any, input: any): Promise<any> {
+    const record = await pbInstance.collection('users').create(input);
+    return record;
+  }
+
+  async obterCidadePorId(pbInstance: any, id: string): Promise<any> {
+    const record = await pbInstance.collection('cidades_hsp').getOne(id);
+    return record;
+  }
+
+  async atualizarOrcamentoParcial(pbInstance: any, id: string, data: any): Promise<any> {
+    const record = await pbInstance.collection('orcamentos').update(id, data);
+    return record;
   }
 }
 

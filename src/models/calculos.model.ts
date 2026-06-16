@@ -112,6 +112,14 @@ export interface SalvarRefinamentoInput {
   marca_inversor: string;
   tensao_inversor: any; // Pode vir como string do form e ser convertida
   valorKit: number;
+  nome_cliente?: string;
+  id_cidade?: string;
+  cidade?: string;
+  estado?: string;
+  estrutura?: string;
+  padrao?: string;
+  consumo_mes?: number;
+  valor_tarifa?: number;
   valorPorcentagem: number;
   valorMaoDeObra: number;
   valorEquipamentoLocal: number;

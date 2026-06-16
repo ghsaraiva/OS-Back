@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const pb = new PocketBase(process.env.POCKETBASE_URL || 'http://150.136.18.45');
+const pb = new PocketBase(process.env.POCKETBASE_URL);
 
 // Desabilitar autocancelamento para o backend
 pb.autoCancellation(false);
@@ -20,8 +20,10 @@ export async function authenticatePB() {
 
   authPromise = (async () => {
     try {
-      await pb.collection('users').authWithPassword('admin@admin.com', 'admin123');
-      console.log('✅ Backend autenticado no PocketBase');
+      await pb.collection('users').authWithPassword(
+        process.env.POCKETBASE_ADMIN_EMAIL || '',
+        process.env.POCKETBASE_ADMIN_PASSWORD || ''
+      );
     } finally {
       authPromise = null;
     }

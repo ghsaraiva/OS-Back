@@ -4,15 +4,13 @@ import calculosService from '../services/calculos.service';
 export class CalculosController {
   dimensionamentoMinimo = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      console.log('[DEBUG] Controller - dimensionamentoMinimo - Body:', req.body);
       const { id_cidade, consumo_mes, valor_tarifa } = req.body;
       if (!id_cidade || !consumo_mes || !valor_tarifa) {
         return res.status(400).json({ error: 'Campos obrigatórios: id_cidade, consumo_mes, valor_tarifa' });
       }
-      const result = await calculosService.calcularDimensionamentoMinimo(req.body);
+      const result = await calculosService.calcularDimensionamentoMinimo(req.pb!, req.body);
       return res.json(result);
     } catch (error: any) {
-      console.error('[DEBUG] Controller - dimensionamentoMinimo - Error:', error);
       if (error.status === 404 || error.message.includes('not found') || error.message === 'HSP não encontrado para esta localidade') {
         return res.status(404).json({ error: 'Localidade não encontrada' });
       }
@@ -22,24 +20,22 @@ export class CalculosController {
 
   criarSolicitacao = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      console.log('[DEBUG] Controller - criarSolicitacao - Body:', req.body);
-      const { user_id, nome_cliente, id_cidade, consumo_mes, valor_tarifa } = req.body;
+      const user_id = req.user?.id;
+      const { nome_cliente, id_cidade, consumo_mes, valor_tarifa } = req.body;
       
       if (!user_id || !nome_cliente || !id_cidade || !consumo_mes || !valor_tarifa) {
-        return res.status(400).json({ error: 'Campos obrigatórios: user_id, nome_cliente, id_cidade, consumo_mes, valor_tarifa' });
+        return res.status(400).json({ error: 'Campos obrigatórios: nome_cliente, id_cidade, consumo_mes, valor_tarifa' });
       }
 
-      const result = await calculosService.criarSolicitacaoInicial(req.body);
+      const result = await calculosService.criarSolicitacaoInicial(req.pb!, { ...req.body, user_id });
       return res.status(201).json(result);
     } catch (error: any) {
-      console.error('[DEBUG] Controller - criarSolicitacao - Error:', error);
       next(error);
     }
   };
 
   sistemaReal = (req: Request, res: Response) => {
     try {
-      console.log('[DEBUG] Controller - sistemaReal - Body:', req.body);
       const { potencia_painel, quantidade_paineis } = req.body;
       if (!potencia_painel || !quantidade_paineis) {
         return res.status(400).json({ error: 'Potência e quantidade são obrigatórias' });
@@ -47,14 +43,12 @@ export class CalculosController {
       const result = calculosService.calcularSistemaReal({ potencia_painel, quantidade_paineis });
       return res.json(result);
     } catch (error: any) {
-      console.error('[DEBUG] Controller - sistemaReal - Error:', error);
       res.status(500).json({ error: 'Erro ao calcular sistema real' });
     }
   };
 
   retornoFinanceiro = (req: Request, res: Response) => {
     try {
-      console.log('[DEBUG] Controller - retornoFinanceiro - Body:', req.body);
       const { kwp_sistema, mediacalc, valor_tarifa, consumo_mes_rs, padrao, valor_investido, quantidade_paineis } = req.body;
       if (kwp_sistema === undefined || mediacalc === undefined || valor_tarifa === undefined) {
         return res.status(400).json({ error: 'Campos obrigatórios: kwp_sistema, mediacalc, valor_tarifa' });
@@ -70,14 +64,12 @@ export class CalculosController {
       });
       return res.json(result);
     } catch (error: any) {
-      console.error('[DEBUG] Controller - retornoFinanceiro - Error:', error);
       res.status(500).json({ error: 'Erro ao calcular retorno financeiro' });
     }
   };
 
   licenciamentoKit = (req: Request, res: Response) => {
     try {
-      console.log('[DEBUG] Controller - licenciamentoKit - Body:', req.body);
       const { valorKit, valorPorcentagem } = req.body;
       if (valorKit === undefined || valorPorcentagem === undefined) {
         return res.status(400).json({ error: 'Campos obrigatórios: valorKit, valorPorcentagem' });
@@ -85,14 +77,12 @@ export class CalculosController {
       const result = calculosService.calcularLicenciamentoKit({ valorKit, valorPorcentagem });
       return res.json(result);
     } catch (error: any) {
-      console.error('[DEBUG] Controller - licenciamentoKit - Error:', error);
       res.status(500).json({ error: 'Erro ao calcular licenciamento do kit' });
     }
   };
 
   precoFinal = (req: Request, res: Response) => {
     try {
-      console.log('[DEBUG] Controller - precoFinal - Body:', req.body);
       const { 
         valorKitLicenciado, 
         valorMaoDeObra, 
@@ -124,7 +114,6 @@ export class CalculosController {
 
       return res.json(result);
     } catch (error: any) {
-      console.error('[DEBUG] Controller - precoFinal - Error:', error);
       if (error instanceof Error && error.message.includes('limite máximo permitido')) {
         return res.status(400).json({ error: error.message });
       }
@@ -134,37 +123,117 @@ export class CalculosController {
 
   salvarRefinamento = async (req: Request, res: Response) => {
     try {
-      console.log('[DEBUG] Controller - salvarRefinamento - Body:', req.body);
       const { orcamentoId } = req.body;
 
       if (!orcamentoId) {
         return res.status(400).json({ error: 'O ID do orçamento é obrigatório para salvar o refinamento.' });
       }
 
-      const result = await calculosService.salvarRefinamentoGerencial(req.body);
+      const result = await calculosService.salvarRefinamentoGerencial(req.pb!, req.body);
       return res.json({ 
         success: true, 
         message: 'Orçamento gerencial salvo com sucesso!', 
         data: result 
       });
     } catch (error: any) {
-      console.error('[DEBUG] Controller - salvarRefinamento - Error:', error);
       res.status(500).json({ error: error.message || 'Erro ao salvar refinamento' });
     }
   };
 
   dashboardStats = async (req: Request, res: Response) => {
     try {
-      console.log('[DEBUG] Controller - dashboardStats - Query:', req.query);
-      const userId = (req.query.userId || req.query.user_id) as string;
-      const isAdminQuery = (req.query.isAdmin || req.query.is_admin) as string;
-      const isAdmin = isAdminQuery === 'true';
+      const userId = req.user?.id;
+      const isAdmin = req.user?.tipo_acesso === 'admin';
 
-      const result = await calculosService.obterMetricasDashboard(userId, isAdmin);
+      const result = await calculosService.obterMetricasDashboard(req.pb!, userId, isAdmin);
       return res.json(result);
     } catch (error: any) {
-      console.error('[DEBUG] Controller - dashboardStats - Error:', error);
       res.status(500).json({ error: error.message || 'Erro ao obter estatísticas do dashboard' });
+    }
+  };
+
+  listarUsuarios = async (req: Request, res: Response) => {
+    try {
+      if (req.user?.tipo_acesso !== 'admin') {
+        return res.status(403).json({ error: 'Acesso Proibido: Permissão insuficiente.' });
+      }
+      const result = await calculosService.obterTodosUsuarios(req.pb!);
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao listar usuários' });
+    }
+  };
+
+  listarOrcamentos = async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      const isAdmin = req.user?.tipo_acesso === 'admin';
+      const result = await calculosService.listarTodosOrcamentos(req.pb!, userId, isAdmin);
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao listar orçamentos' });
+    }
+  };
+
+  listarCidades = async (req: Request, res: Response) => {
+    try {
+      const search = req.query.search as string;
+      const result = await calculosService.obterCidadesHSP(req.pb!, search);
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao listar cidades' });
+    }
+  };
+
+  obterCidade = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result = await calculosService.obterCidadePorId(req.pb!, id);
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao obter cidade por ID' });
+    }
+  };
+
+  obterOrcamento = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result = await calculosService.obterOrcamentoPorId(req.pb!, id);
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao obter orçamento' });
+    }
+  };
+
+  obterOrcamento = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result = await calculosService.obterOrcamentoPorId(req.pb!, id);
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao obter orçamento' });
+    }
+  };
+
+  atualizarOrcamento = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result = await calculosService.atualizarOrcamentoParcial(req.pb!, id, req.body);
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao atualizar orçamento' });
+    }
+  };
+
+  criarUsuario = async (req: Request, res: Response) => {
+    try {
+      if (req.user?.tipo_acesso !== 'admin') {
+        return res.status(403).json({ error: 'Acesso Proibido: Permissão insuficiente.' });
+      }
+      const result = await calculosService.criarNovoUsuario(req.pb!, req.body);
+      return res.status(201).json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao criar usuário' });
     }
   };
 }
