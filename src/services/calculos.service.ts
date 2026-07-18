@@ -164,17 +164,27 @@ export class CalculosService {
       valorEquipamentoLocal, 
       valorHomologacao, 
       porcentagemLucroLiquido,
-      quantidade_paineis
+      quantidade_paineis,
+      potencia_inversor,
+      quantidade_inversores
     } = input;
 
     if (porcentagemLucroLiquido > MAX_LUCRO_LIQUIDO_PERMITIDO) {
       throw new Error(`A porcentagem de lucro líquido desejada excede o limite máximo permitido de ${MAX_LUCRO_LIQUIDO_PERMITIDO}%.`);
     }
 
+    let finalHomologacao = valorHomologacao || 0;
+    if (potencia_inversor !== undefined) {
+      const pot = typeof potencia_inversor === 'number' ? potencia_inversor : parseFloat(potencia_inversor);
+      const qtd = typeof quantidade_inversores === 'number' ? quantidade_inversores : parseInt(quantidade_inversores);
+      const potenciaTotal = (pot || 0) * (qtd || 1);
+      finalHomologacao = this.calcularValorHomologacao(potenciaTotal);
+    }
+
     const valorMaoDeObraTotal = valorMaoDeObra * (quantidade_paineis || 0);
     const valorEquipamentoLocalTotal = valorEquipamentoLocal * (quantidade_paineis || 0);
 
-    const custoDireto = valorKitLicenciado + valorMaoDeObraTotal + valorEquipamentoLocalTotal + valorHomologacao;
+    const custoDireto = valorKitLicenciado + valorMaoDeObraTotal + valorEquipamentoLocalTotal + finalHomologacao;
     const margemSeguranca = (valorKitLicenciado / 0.97) - valorKitLicenciado;
     const divisor = 1 - (porcentagemLucroLiquido / 100) - TAXA_SEGURO - TAXA_IMPOSTO;
     const precoFinalSugerido = (custoDireto + margemSeguranca - (TAXA_IMPOSTO * valorKitLicenciado)) / divisor;
@@ -193,8 +203,18 @@ export class CalculosService {
       imposto: this.formatarMoeda(imposto),
       precoFinalSugerido: this.formatarMoeda(precoFinalSugerido),
       valorMaoDeObraTotal: this.formatarMoeda(valorMaoDeObraTotal),
-      valorEquipamentoLocalTotal: this.formatarMoeda(valorEquipamentoLocalTotal)
+      valorEquipamentoLocalTotal: this.formatarMoeda(valorEquipamentoLocalTotal),
+      valorHomologacao: this.formatarMoeda(finalHomologacao)
     };
+  }
+
+  calcularValorHomologacao(potenciaInversor: number): number {
+    if (potenciaInversor <= 10) return 500;
+    if (potenciaInversor <= 20) return 750;
+    if (potenciaInversor <= 40) return 1200;
+    if (potenciaInversor <= 50) return 1700;
+    if (potenciaInversor <= 75) return 2500;
+    return 10000;
   }
 
   async criarSolicitacaoInicial(pbInstance: any, input: CriarSolicitacaoInput): Promise<any> {
@@ -293,6 +313,11 @@ export class CalculosService {
     const kwpSistemaVal = typeof kwp_sistema === 'number' ? kwp_sistema : (parseFloat(kwp_sistema) || 0);
     const composicao1 = `${quantidade_paineis} Painéis, ${marca_modulo}, ${kwpSistemaVal.toFixed(2)} kWp`;
 
+    const potenciaInversorVal = typeof potencia_inversor === 'number' ? potencia_inversor : (parseFloat(potencia_inversor) || 0);
+    const qtdInversoresVal = typeof quantidade_inversores === 'number' ? quantidade_inversores : (parseInt(quantidade_inversores) || 1);
+    const potenciaTotal = potenciaInversorVal * qtdInversoresVal;
+    const calculatedHomologacao = this.calcularValorHomologacao(potenciaTotal);
+
     const payloadPocketBase = {
       nome_cliente: nome_cliente !== undefined ? nome_cliente : orcamentoOriginal.nome_cliente,
       id_cidade: id_cidade !== undefined ? id_cidade : orcamentoOriginal.id_cidade,
@@ -311,7 +336,7 @@ export class CalculosService {
       lucro_liquido_perc: porcentagemLucroLiquido,
       mao_obra: valorMaoDeObra,
       equipamento_local: valorEquipamentoLocal,
-      valor_homologacao: valorHomologacao,
+      valor_homologacao: calculatedHomologacao,
       chpzdpth: composicao1,
       observacao: observacao || orcamentoOriginal.observacao,
       

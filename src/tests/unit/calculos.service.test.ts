@@ -156,6 +156,43 @@ describe('CalculosService Reestruturado (Unit)', () => {
     });
   });
 
+  describe('Cálculo do Valor da Homologação (Regra da Potência do Inversor)', () => {
+    it('deve retornar R$ 500 para potências de inversor até 10 kW', () => {
+      expect(calculosService.calcularValorHomologacao(0)).toBe(500);
+      expect(calculosService.calcularValorHomologacao(5)).toBe(500);
+      expect(calculosService.calcularValorHomologacao(10)).toBe(500);
+    });
+
+    it('deve retornar R$ 750 para potências de inversor entre 10 e 20 kW', () => {
+      expect(calculosService.calcularValorHomologacao(10.1)).toBe(750);
+      expect(calculosService.calcularValorHomologacao(15)).toBe(750);
+      expect(calculosService.calcularValorHomologacao(20)).toBe(750);
+    });
+
+    it('deve retornar R$ 1200 para potências de inversor entre 20 e 40 kW', () => {
+      expect(calculosService.calcularValorHomologacao(20.1)).toBe(1200);
+      expect(calculosService.calcularValorHomologacao(30)).toBe(1200);
+      expect(calculosService.calcularValorHomologacao(40)).toBe(1200);
+    });
+
+    it('deve retornar R$ 1700 para potências de inversor entre 40 e 50 kW', () => {
+      expect(calculosService.calcularValorHomologacao(40.1)).toBe(1700);
+      expect(calculosService.calcularValorHomologacao(45)).toBe(1700);
+      expect(calculosService.calcularValorHomologacao(50)).toBe(1700);
+    });
+
+    it('deve retornar R$ 2500 para potências de inversor entre 50 e 75 kW', () => {
+      expect(calculosService.calcularValorHomologacao(50.1)).toBe(2500);
+      expect(calculosService.calcularValorHomologacao(60)).toBe(2500);
+      expect(calculosService.calcularValorHomologacao(75)).toBe(2500);
+    });
+
+    it('deve retornar R$ 10000 para potências de inversor maiores que 75 kW', () => {
+      expect(calculosService.calcularValorHomologacao(75.1)).toBe(10000);
+      expect(calculosService.calcularValorHomologacao(100)).toBe(10000);
+    });
+  });
+
   describe('Seção 5: Dashboard e Métricas', () => {
     it('deve obter métricas do dashboard e contar clientes de forma única e normalizada', async () => {
       const mockRecords = [

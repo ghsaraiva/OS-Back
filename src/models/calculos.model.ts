@@ -70,9 +70,11 @@ export interface PrecoFinalInput {
   valorKitLicenciado: number;
   valorMaoDeObra: number; // Valor por painel
   valorEquipamentoLocal: number; // Valor por painel
-  valorHomologacao: number;
+  valorHomologacao?: number;
   porcentagemLucroLiquido: number;
   quantidade_paineis: number;
+  potencia_inversor?: number;
+  quantidade_inversores?: number;
 }
 
 export interface PrecoFinalOutput {
@@ -85,6 +87,7 @@ export interface PrecoFinalOutput {
   valorMaoDeObraTotal: number;
   valorEquipamentoLocalTotal: number;
   custoDireto: number; // Novo campo para o custo bruto sem impostos/margem
+  valorHomologacao: number;
 }
 
 export interface CriarSolicitacaoInput {
