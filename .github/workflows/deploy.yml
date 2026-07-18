@@ -1,0 +1,39 @@
+name: Deploy Backend to Oracle VPS
+
+on:
+  push:
+    branches:
+      - main 
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "🚀 Iniciando o Deploy Automático..."
+            
+            # 1. Entra na pasta exata do seu backend
+            cd ~/server/OS-Back
+            
+            # 2. Descarta qualquer alteração local pendente e puxa o código novo do GitHub
+            git reset --hard origin/main
+            git pull origin main
+            
+            # 3. Sobe um nível para a pasta onde está o docker-compose.yml global
+            cd ~/server
+            
+            # 4. Força o Docker a reconstruir apenas o container do backend limpando o cache
+            sudo docker compose build --no-cache backend
+            
+            # 5. Reinicia o serviço do backend aplicando as alterações sem derrubar o resto (Caddy/Pocketbase)
+            sudo docker compose up -d --force-recreate backend
+            
+            echo "✅ Deploy finalizado com sucesso no Docker!"
