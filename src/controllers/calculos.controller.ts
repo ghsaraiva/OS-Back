@@ -106,8 +106,9 @@ export class CalculosController {
         valorHomologacao, 
         porcentagemLucroLiquido,
         quantidade_paineis,
-        potencia_inversor,
-        quantidade_inversores
+
+        quantidade_inversores,
+        potencia_inversor
       } = req.body;
 
       if (
@@ -128,8 +129,9 @@ export class CalculosController {
         valorHomologacao,
         porcentagemLucroLiquido,
         quantidade_paineis,
-        potencia_inversor,
-        quantidade_inversores
+
+        quantidade_inversores,
+        potencia_inversor
       });
 
       return res.json(result);
@@ -157,6 +159,31 @@ export class CalculosController {
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Erro ao salvar refinamento' });
+    }
+  };
+
+  atualizarPrecoVenda = async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const { preco_final_venda } = req.body;
+
+      if (!id || preco_final_venda === undefined || preco_final_venda <= 0) {
+        return res.status(400).json({ error: 'ID do orçamento e preco_final_venda (maior que zero) são obrigatórios.' });
+      }
+
+      const result = await calculosService.atualizarPrecoVenda(req.pb!, id, preco_final_venda);
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao atualizar preço de venda' });
+    }
+  };
+
+  configMargensLucro = (req: Request, res: Response) => {
+    try {
+      const result = calculosService.obterConfigMargensLucro();
+      return res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao obter configuração de margens' });
     }
   };
 
@@ -249,3 +276,4 @@ export class CalculosController {
 }
 
 export default new CalculosController();
+

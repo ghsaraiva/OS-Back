@@ -52,6 +52,7 @@ export interface GeracaoERetornoOutput {
   economia_mensal_rs: number;
   economia_anual_rs: number;
   tempo_retorno: string;
+  media_mes_kwh: number;
 }
 
 // Seção 3: Dinâmica do Kit
@@ -71,6 +72,8 @@ export interface PrecoFinalInput {
   valorMaoDeObra: number; // Valor por painel
   valorEquipamentoLocal: number; // Valor por painel
   valorHomologacao?: number;
+  quantidade_inversores?: number;
+  potencia_inversor?: number;
   porcentagemLucroLiquido: number;
   quantidade_paineis: number;
   potencia_inversor?: number;
@@ -87,7 +90,7 @@ export interface PrecoFinalOutput {
   valorMaoDeObraTotal: number;
   valorEquipamentoLocalTotal: number;
   custoDireto: number; // Novo campo para o custo bruto sem impostos/margem
-  valorHomologacao: number;
+  valorHomologacaoCalculado: string;
 }
 
 export interface CriarSolicitacaoInput {
@@ -130,29 +133,8 @@ export interface SalvarRefinamentoInput {
   porcentagemLucroLiquido: number;
   observacao?: string;
   
-  // Novos campos calculados (Pass-through do Front-end)
-  kwp_minimo: number;
-  kwp_sistema: number;
-  valor_kit_final: number;
-  lucro_equipamento: number;
-  valor_mao_obra_final: number;
-  valor_equip_local_final: number;
-  seguro: number;
-  custo_projeto: number;
-  imposto: number;
-  margem_seguranca: number;
-  lucro_liquido_previsto: number;
-  preco_final_venda: number;
-  situacao: string;
-
-  // Novos campos de Sistema e Geração
+  // Novos campos de Sistema e Geração (Mantemos apenas os inputs)
   area_estimada?: number;
-  geracao_mes?: number;
-  geracao_ano?: number;
-  valor_pago_mes?: number;
-  valor_pago_ano?: number;
-  porcentagem_reducao?: number;
-  tempo_retorno?: string;
 
   // Novos campos de Garantias e Suporte
   garantia_fabrica_modulo?: string;
@@ -170,10 +152,16 @@ export interface SalvarRefinamentoInput {
   caracteristica_estrutura_4?: string;
   caracteristica_estrutura_5?: string;
 
-  // Novos campos de Composição
-  composicao_1?: string;
-  composicao_2?: string;
-  composicao_3?: string;
-  composicao_4?: string;
-  composicao_5?: string;
+  // Novos campos de Composição (Serão gerados no backend, mas mantidos opcionais caso ainda passem)
 }
+
+export interface AtualizarPrecoVendaInput {
+  preco_final_venda: number;
+}
+
+export interface ConfigMargensLucroOutput {
+  opcoes: { value: string; label: string }[];
+  min: number;
+  max: number;
+}
+
