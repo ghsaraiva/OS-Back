@@ -24,6 +24,9 @@ router.post('/preco-final', calculosController.precoFinal);
 // Persistência e Validação Final - Restrito apenas a administradores
 router.post('/salvar-refinamento', authorizeRoles(['admin']), calculosController.salvarRefinamento);
 
+// Configuração de margens de lucro
+router.get('/config/margens-lucro', calculosController.configMargensLucro);
+
 // Métricas do Dashboard
 router.get('/dashboard/stats', calculosController.dashboardStats);
 
@@ -32,6 +35,7 @@ router.get('/users', authorizeRoles(['admin']), calculosController.listarUsuario
 router.post('/users', authorizeRoles(['admin']), calculosController.criarUsuario);
 router.get('/budgets', calculosController.listarOrcamentos);
 router.get('/budgets/:id', calculosController.obterOrcamento);
+router.patch('/budgets/:id/preco-venda', calculosController.atualizarPrecoVenda);
 router.patch('/budgets/:id', calculosController.atualizarOrcamento);
 
 // Listagem de Cidades com HSP

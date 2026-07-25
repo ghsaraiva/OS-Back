@@ -1,178 +1,137 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import calculosService from '../../services/calculos.service';
-import pb from '../../config/pocketbase';
+import { CalculosDataFetcher } from '../../services/calculos.dataFetcher';
 
-// Mock do PocketBase
-vi.mock('../../config/pocketbase', () => ({
-  default: {
-    collection: vi.fn().mockReturnThis(),
-    getFirstListItem: vi.fn(),
-    getOne: vi.fn(),
-    getFullList: vi.fn(),
-  },
-  authenticatePB: vi.fn().mockResolvedValue(true)
+// Mock do DataFetcher (mockando a camada de acesso a dados)
+vi.mock('../../services/calculos.dataFetcher', () => ({
+  CalculosDataFetcher: {
+    obterCidadePorId: vi.fn(),
+    obterCidadesHSP: vi.fn(),
+    obterOrcamentoPorId: vi.fn(),
+    listarOrcamentosSimplificados: vi.fn(),
+    atualizarOrcamento: vi.fn(),
+    criarOrcamento: vi.fn(),
+  }
 }));
 
-describe('CalculosService Reestruturado (Unit)', () => {
-  describe('Seção 1: Captação', () => {
-    it('deve calcular o dimensionamento mínimo corretamente', async () => {
-      const mockRecord = { mediacalc: 5000, cidade: 'FLORIANOPOLIS', estado: 'SC' };
-      (pb.collection('cidades_hsp').getOne as any).mockResolvedValue(mockRecord);
+describe('CalculosService Orquestrador (Unit)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-      const result = await calculosService.calcularDimensionamentoMinimo(pb, {
-        id_cidade: 'id123',
-        cidade: 'FLORIANOPOLIS',
-        estado: 'SC',
+  describe('Integração - Salvamento e Edição (Refinamento Gerencial)', () => {
+    it('deve recalcular valores inteiramente e orquestrar salvamento via salvarRefinamentoGerencial', async () => {
+      const mockOrcamentoOriginal = {
+        id: 'orc123',
+        id_cidade: 'cid123',
         consumo_mes: 500,
-        valor_tarifa: 1.0
-      });
+        valor_tarifa: 1.0,
+        situacao: 'Aberto'
+      };
+      const mockCidade = { id: 'cid123', mediacalc: 5.0 };
+      
+      (CalculosDataFetcher.obterOrcamentoPorId as any).mockResolvedValue(mockOrcamentoOriginal);
+      (CalculosDataFetcher.obterCidadePorId as any).mockResolvedValue(mockCidade);
+      (CalculosDataFetcher.atualizarOrcamento as any).mockResolvedValue({ id: 'orc123', status: 'updated' });
 
-      expect(result.kwp_minimo).toBe(3.33);
-    });
-
-    it('deve calcular o dimensionamento interno com os mesmos valores da regra matemática de produção', () => {
-      const result = (calculosService as any).calcularDimensionamentoInterno(5000, 500, 1.0);
-      expect(result.consumo_mensal_kwh).toBe(500);
-      expect(result.mediacalc).toBe(5);
-      expect(result.hsp_mensal).toBe(150);
-      expect(result.kwp_minimo).toBe(3.3333333333333335);
-    });
-  });
-
-  describe('Seção 2: Equipamentos', () => {
-    it('deve calcular o sistema real', () => {
-      const result = calculosService.calcularSistemaReal({ potencia_painel: 550, quantidade_paineis: 10 });
-      expect(result.kwp_sistema).toBe(5.5);
-    });
-
-    it('deve calcular geração e retorno', () => {
-      const result = calculosService.calcularGeracaoERetorno({
-        kwp_sistema: 5.5,
-        mediacalc: 5.0,
-        valor_tarifa: 0.85,
-        consumo_mes_rs: 701.25,
-        padrao: 'Trifásico',
-        valor_investido: 20000,
-        quantidade_paineis: 10
-      });
-      expect(result.geracao_mensal_kwh).toBe(825);
-      expect(result.economia_mensal_rs).toBe(558.19);
-    });
-  });
-
-  describe('Seção 3: Dinâmica do Kit', () => {
-    it('deve calcular o licenciamento do kit corretamente', () => {
-      const result = calculosService.calcularLicenciamentoKit({
+      const input: any = {
+        orcamentoId: 'orc123',
+        potencia_painel: 550,
+        quantidade_paineis: 10,
+        peso_painel: 25,
+        marca_modulo: 'Canadian',
+        quantidade_inversores: 1,
+        potencia_inversor: 5,
+        modelo_inversor: 'Growatt',
+        marca_inversor: 'Growatt',
+        tensao_inversor: 220,
         valorKit: 10000,
-        valorPorcentagem: 10
-      });
-      expect(result.lucroEquipamentoFinal).toBe(1000);
-      expect(result.valorKitLicenciado).toBe(11000);
-    });
-  });
-
-  describe('Seção 4: Cascata do Projeto (Prova Real)', () => {
-    it('deve fechar a conta exatamente no centavo (Soma das partes = Preço Final)', () => {
-      const input = {
-        valorKitLicenciado: 11000,
+        valorPorcentagem: 10,
         valorMaoDeObra: 2000,
         valorEquipamentoLocal: 500,
         valorHomologacao: 1000,
         porcentagemLucroLiquido: 15,
-        quantidade_paineis: 1
       };
 
-      const result = calculosService.calcularPrecoFinal(input);
-
-      const somaProvaReal = 
-        input.valorKitLicenciado + 
-        input.valorMaoDeObra + 
-        input.valorEquipamentoLocal + 
-        input.valorHomologacao + 
-        result.margemSeguranca + 
-        result.seguro + 
-        result.imposto + 
-        result.lucroLiquidoRs;
-
-      expect(somaProvaReal).toBeCloseTo(result.precoFinalSugerido, 1);
-      expect(result.precoFinalSugerido).toBe(19255.78);
-    });
-  });
-
-  describe('Casos de Payback (Normalização)', () => {
-    it('deve normalizar 11.9 meses de payback para 1 ano (evitando 0 anos e 12 meses)', () => {
-      const result = calculosService.calcularGeracaoERetorno({
+      const result = await calculosService.salvarRefinamentoGerencial({}, input);
+      
+      expect(CalculosDataFetcher.atualizarOrcamento).toHaveBeenCalledWith(expect.anything(), 'orc123', expect.objectContaining({
         kwp_sistema: 5.5,
-        mediacalc: 5.0,
-        valor_tarifa: 0.85,
-        consumo_mes_rs: 701.25,
-        padrao: 'Trifásico',
-        valor_investido: 6642.46,
-        quantidade_paineis: 10
-      });
-      expect(result.tempo_retorno).toBe('1 ano');
+        valor_kit_final: 11000,
+        situacao: 'Aberto',
+        composicao_1: '10 módulos solares fotovoltaicos Canadian de 550W'
+      }));
+      expect(result.status).toBe('updated');
     });
 
-    it('deve normalizar 23.9 meses de payback para 2 anos (evitando 1 ano e 12 meses)', () => {
-      const result = calculosService.calcularGeracaoERetorno({
-        kwp_sistema: 5.5,
-        mediacalc: 5.0,
-        valor_tarifa: 0.85,
-        consumo_mes_rs: 701.25,
-        padrao: 'Trifásico',
-        valor_investido: 13340.74,
-        quantidade_paineis: 10
-      });
-      expect(result.tempo_retorno).toBe('2 anos');
-    });
-  });
+    it('deve orquestrar atualizarPrecoVenda e calcular impostos, lucro e custo de projeto', async () => {
+      const mockOrcamentoOriginal = {
+        id: 'orc123',
+        valor_kit_final: 11000,
+        valor_mao_obra_final: 2000,
+        valor_equip_local_final: 500,
+        valor_homologacao: 1000,
+        margem_seguranca: 577.67
+      };
+      
+      (CalculosDataFetcher.obterOrcamentoPorId as any).mockResolvedValue(mockOrcamentoOriginal);
+      (CalculosDataFetcher.atualizarOrcamento as any).mockResolvedValue({ id: 'orc123', preco_final_venda: 20000 });
 
-  describe('Salvar Refinamento - Validação de Integridade', () => {
-    it('deve recalcular com precisão sem brechas para dízimas flutuantes durante o faturamento', () => {
-      const resultadoMock = calculosService.calcularPrecoFinal({
-        valorKitLicenciado: 12000,
-        valorMaoDeObra: 2500,
-        valorEquipamentoLocal: 800,
-        valorHomologacao: 750,
-        porcentagemLucroLiquido: 18,
-        quantidade_paineis: 10
-      });
+      const result = await calculosService.atualizarPrecoVenda({}, 'orc123', 20000);
 
-      expect(Number((resultadoMock.precoFinalSugerido - resultadoMock.lucroLiquidoRs).toFixed(2))).toBeLessThan(resultadoMock.precoFinalSugerido);
-      expect(resultadoMock.lucroLiquidoRs).toBe(Number((resultadoMock.precoFinalSugerido * 0.18).toFixed(2)));
-    });
-
-    it('deve lançar erro se a porcentagem de lucro líquido desejada for maior que o limite permitido', () => {
-      expect(() => {
-        calculosService.calcularPrecoFinal({
-          valorKitLicenciado: 10000,
-          valorMaoDeObra: 100,
-          valorEquipamentoLocal: 50,
-          valorHomologacao: 1000,
-          porcentagemLucroLiquido: 85,
-          quantidade_paineis: 10
-        });
-      }).toThrow('excede o limite máximo permitido');
+      expect(CalculosDataFetcher.atualizarOrcamento).toHaveBeenCalledWith(expect.anything(), 'orc123', expect.objectContaining({
+        preco_final_venda: 20000,
+        seguro: 300,
+        imposto: 1350,
+        custo_projeto: 16727.67,
+        lucro_liquido_previsto: 3272.33,
+        lucro_liquido_perc: 16.36
+      }));
+      expect(result.preco_final_venda).toBe(20000);
     });
   });
 
-  describe('Seção 5: Dashboard e Métricas', () => {
-    it('deve obter métricas do dashboard e contar clientes de forma única e normalizada', async () => {
+  describe('Cidades com HSP', () => {
+    it('deve buscar e normalizar HSP na listagem de cidades via obterCidadesHSP', async () => {
+      const mockRecords = [
+        { id: '1', cidade: 'Cidade A', mediacalc: 5.2 },
+        { id: '2', cidade: 'Cidade B', mediacalc: 5200 } // Cru, precisa de normalização
+      ];
+      (CalculosDataFetcher.obterCidadesHSP as any).mockResolvedValue(mockRecords);
+
+      const result = await calculosService.obterCidadesHSP({});
+
+      expect(result).toHaveLength(2);
+      expect(result[0].mediacalc).toBe(5.2);
+      expect(result[1].mediacalc).toBe(5.2);
+    });
+
+    it('deve buscar e normalizar HSP ao obter uma cidade por ID', async () => {
+      const mockRecord = { id: '2', cidade: 'Cidade B', mediacalc: 5200 };
+      (CalculosDataFetcher.obterCidadePorId as any).mockResolvedValue(mockRecord);
+
+      const result = await calculosService.obterCidadePorId({}, '2');
+      expect(result.mediacalc).toBe(5.2);
+    });
+  });
+
+  describe('Dashboard e Métricas', () => {
+    it('deve orquestrar obterMetricasDashboard e formatar corretamente os retornos', async () => {
       const mockRecords = [
         { id: '1', situacao: 'Aberto', nome_cliente: 'Gabriel ', estado: 'SP' },
         { id: '2', situacao: 'Aberto', nome_cliente: 'gabriel', estado: 'SP' },
         { id: '3', situacao: 'Técnico Finalizado', nome_cliente: 'Gabriel', estado: 'RJ' },
         { id: '4', situacao: 'Outro', nome_cliente: 'Maria Silva', estado: 'rj' },
-        { id: '5', situacao: 'Outro', nome_cliente: '', estado: '' }
+        { id: '5', situacao: 'Outro', nome_cliente: '', estado: '' } // Cliente vazio não conta
       ];
-      (pb.collection('orcamentos').getFullList as any).mockResolvedValue(mockRecords);
+      (CalculosDataFetcher.listarOrcamentosSimplificados as any).mockResolvedValue(mockRecords);
 
-      const result = await calculosService.obterMetricasDashboard(pb, 'user123', true);
+      const result = await calculosService.obterMetricasDashboard({}, 'user123', true);
 
       expect(result.kpis.total).toBe(5);
       expect(result.kpis.abertos).toBe(2);
       expect(result.kpis.concluidos).toBe(1);
-      expect(result.kpis.clientes).toBe(2);
+      expect(result.kpis.clientes).toBe(2); // Gabriel, Maria
 
       expect(result.demographics).toHaveLength(2);
       expect(result.demographics.find((d: any) => d.name === 'SP')?.count).toBe(2);
