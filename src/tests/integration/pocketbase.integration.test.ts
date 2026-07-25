@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import pb, { authenticatePB } from '../../config/pocketbase';
 
-describe('Integração PocketBase (Real Database Integration)', () => {
+const skipIntegration = !process.env.POCKETBASE_URL || !process.env.POCKETBASE_ADMIN_EMAIL;
+
+describe.skipIf(skipIntegration)('Integração PocketBase (Real Database Integration)', () => {
   let testBudget: any = null;
   let testCity: any = null;
 

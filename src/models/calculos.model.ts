@@ -76,6 +76,8 @@ export interface PrecoFinalInput {
   potencia_inversor?: number;
   porcentagemLucroLiquido: number;
   quantidade_paineis: number;
+  potencia_inversor?: number;
+  quantidade_inversores?: number;
 }
 
 export interface PrecoFinalOutput {
@@ -162,3 +164,4 @@ export interface ConfigMargensLucroOutput {
   min: number;
   max: number;
 }
+

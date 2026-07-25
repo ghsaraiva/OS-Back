@@ -14,6 +14,7 @@ router.post('/criar-solicitacao', calculosController.criarSolicitacao);
 // Seção 2 (Equipamentos)
 router.post('/sistema-real', calculosController.sistemaReal);
 router.post('/retorno-financeiro', calculosController.retornoFinanceiro);
+router.post('/homologacao', calculosController.homologacao);
 
 // Seção 3 (Dinâmica do Kit)
 router.post('/licenciamento-kit', calculosController.licenciamentoKit);

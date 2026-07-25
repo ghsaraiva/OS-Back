@@ -68,6 +68,22 @@ export class CalculosController {
     }
   };
 
+  homologacao = (req: Request, res: Response) => {
+    try {
+      const { potencia_inversor, quantidade_inversores } = req.body;
+      if (potencia_inversor === undefined) {
+        return res.status(400).json({ error: 'Campo obrigatório: potencia_inversor' });
+      }
+      const pot = typeof potencia_inversor === 'number' ? potencia_inversor : parseFloat(potencia_inversor);
+      const qtd = typeof quantidade_inversores === 'number' ? quantidade_inversores : parseInt(quantidade_inversores);
+      const potenciaTotal = (pot || 0) * (qtd || 1);
+      const valorHomologacao = calculosService.calcularValorHomologacao(potenciaTotal);
+      return res.json({ valorHomologacao });
+    } catch (error: any) {
+      res.status(500).json({ error: 'Erro ao calcular valor da homologação' });
+    }
+  };
+
   licenciamentoKit = (req: Request, res: Response) => {
     try {
       const { valorKit, valorPorcentagem } = req.body;
@@ -90,6 +106,7 @@ export class CalculosController {
         valorHomologacao, 
         porcentagemLucroLiquido,
         quantidade_paineis,
+
         quantidade_inversores,
         potencia_inversor
       } = req.body;
@@ -98,11 +115,11 @@ export class CalculosController {
         valorKitLicenciado === undefined || 
         valorMaoDeObra === undefined || 
         valorEquipamentoLocal === undefined || 
-        valorHomologacao === undefined || 
+        (valorHomologacao === undefined && potencia_inversor === undefined) || 
         porcentagemLucroLiquido === undefined ||
         quantidade_paineis === undefined
       ) {
-        return res.status(400).json({ error: 'Todos os campos de precificação são obrigatórios, incluindo quantidade_paineis' });
+        return res.status(400).json({ error: 'Todos os campos de precificação são obrigatórios, incluindo quantidade_paineis e homologação/inversor' });
       }
 
       const result = calculosService.calcularPrecoFinal({
@@ -112,6 +129,7 @@ export class CalculosController {
         valorHomologacao,
         porcentagemLucroLiquido,
         quantidade_paineis,
+
         quantidade_inversores,
         potencia_inversor
       });
@@ -258,3 +276,4 @@ export class CalculosController {
 }
 
 export default new CalculosController();
+

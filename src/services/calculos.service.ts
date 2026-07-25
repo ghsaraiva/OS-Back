@@ -54,6 +54,15 @@ export class CalculosService {
     return CalculosProcess.calcularPrecoFinal(input);
   }
 
+  calcularValorHomologacao(potenciaInversor: number): number {
+    if (potenciaInversor <= 10) return 500;
+    if (potenciaInversor <= 20) return 750;
+    if (potenciaInversor <= 40) return 1200;
+    if (potenciaInversor <= 50) return 1700;
+    if (potenciaInversor <= 75) return 2500;
+    return 10000;
+  }
+
   async criarSolicitacaoInicial(pbInstance: any, input: CriarSolicitacaoInput): Promise<any> {
     const { id_cidade, consumo_mes, valor_tarifa } = input;
     const recordCidade = await CalculosDataFetcher.obterCidadePorId(pbInstance, id_cidade);
@@ -129,6 +138,11 @@ export class CalculosService {
       input.potencia_inversor,
       kwp_sistema
     );
+
+    const potenciaInversorVal = typeof potencia_inversor === 'number' ? potencia_inversor : (parseFloat(potencia_inversor) || 0);
+    const qtdInversoresVal = typeof quantidade_inversores === 'number' ? quantidade_inversores : (parseInt(quantidade_inversores) || 1);
+    const potenciaTotal = potenciaInversorVal * qtdInversoresVal;
+    const calculatedHomologacao = this.calcularValorHomologacao(potenciaTotal);
 
     const payloadPocketBase = {
       nome_cliente: input.nome_cliente !== undefined ? input.nome_cliente : orcamentoOriginal.nome_cliente,
@@ -294,3 +308,4 @@ export class CalculosService {
 }
 
 export default new CalculosService();
+
