@@ -3,8 +3,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Usando importação dinâmica do pdfjs-dist para garantir que funcionará com ESM/CJS
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.js';
+// Usando importação do pdfjs-dist para garantir que funcionará com ESM/CJS
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +22,7 @@ export class PdfService {
     const loadingTask = pdfjsLib.getDocument({
       data,
       useSystemFonts: true,
-      standardFontDataUrl: path.join(__dirname, '../../../node_modules/pdfjs-dist/standard_fonts/')
+      standardFontDataUrl: path.join(__dirname, '../../../node_modules/pdfjs-dist/standard_fonts/').replace(/\\/g, '/') + '/'
     });
     
     const pdfDocument = await loadingTask.promise;
@@ -93,6 +93,20 @@ export class PdfService {
       '{{preco_final_venda}}': formatCurrency(dadosOrcamento.preco_final_venda || 0),
       '{{observacao}}': dadosOrcamento.observacao || '',
       '{{marca_modulo}}': dadosOrcamento.marca_painel || '',
+      '{{potencia_painel}}': `${dadosOrcamento.potencia_painel || 0}W`,
+      '{{peso_painel}}': `${dadosOrcamento.peso_painel || 0}kg`,
+      '{{modelo_inversor}}': dadosOrcamento.modelo_inversor || '',
+      '{{marca_inversor}}': dadosOrcamento.marca_inversor || '',
+      '{{monitoramento_inversor}}': dadosOrcamento.monitoramento_inversor || '',
+      '{{estrutura}}': dadosOrcamento.estrutura || '',
+      '{{material_estrutura}}': dadosOrcamento.material_estrutura || '',
+      '{{garantia_estrutura}}': dadosOrcamento.garantia_estrutura || '',
+      '{{caracteristica_estrutura_1}}': '',
+      '{{caracteristica_estrutura_2}}': '',
+      '{{caracteristica_estrutura_3}}': '',
+      '{{caracteristica_estrutura_4}}': '',
+      '{{caracteristica_estrutura_5}}': '',
+      '{{tensao_inversor}}': `${dadosOrcamento.tensao_inversor || 0}V`,
       '{{garantia_inversor}}': dadosOrcamento.garantia_inversor || '',
       '{{garantia_fabrica_modulo}}': dadosOrcamento.garantia_fabrica_modulo || '',
       '{{garantia_eficiencia_modulo}}': dadosOrcamento.garantia_eficiencia_modulo || '',
