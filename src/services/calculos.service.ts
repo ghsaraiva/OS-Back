@@ -11,50 +11,26 @@ import {
   PrecoFinalInput,
   PrecoFinalOutput,
   SalvarRefinamentoInput,
-  CriarSolicitacaoInput
+  CriarSolicitacaoInput,
+  ConfigMargensLucroOutput
 } from '../models/calculos.model';
-
-// Constantes de precificação para evitar números mágicos
-export const TAXA_SEGURO = 0.015; // 1.5%
-export const TAXA_IMPOSTO = 0.15; // 15%
-// Ponto de quebra ocorre quando divisor = 0 (1 - L - 0.015 - 0.15 = 0 => L = 0.835)
-export const MAX_LUCRO_LIQUIDO_PERMITIDO = 83.0; // 83% de margem é o limite seguro recomendado
+import { CalculosDataFetcher } from './calculos.dataFetcher';
+import { CalculosProcess } from './calculos.process';
+import { CalculosFormatter } from './calculos.formatter';
+import { formatarMoeda, TAXA_SEGURO, TAXA_IMPOSTO } from '../utils/calculos.utils';
 
 export class CalculosService {
-  private formatarMoeda(valor: number): number {
-    return Number(valor.toFixed(2));
-  }
-
-  private calcularDimensionamentoInterno(mediacalcWh: number, consumo_mes: number, valor_tarifa: number) {
-    const consumo_mensal_kwh = consumo_mes / valor_tarifa;
-    const mediacalc = mediacalcWh / 1000;
-    const hsp_mensal = mediacalc * 30;
-    const kwp_minimo = consumo_mensal_kwh / hsp_mensal;
-
-    return {
-      consumo_mensal_kwh,
-      mediacalc,
-      hsp_mensal,
-      kwp_minimo
-    };
-  }
-
   async calcularDimensionamentoMinimo(pbInstance: any, input: DimensionamentoMinimoInput): Promise<DimensionamentoMinimoOutput> {
     const { id_cidade, consumo_mes, valor_tarifa } = input;
+    const record = await CalculosDataFetcher.obterCidadePorId(pbInstance, id_cidade);
 
-    const record = await pbInstance.collection('cidades_hsp').getOne(id_cidade);
-
-    if (!record) {
-      throw new Error('HSP não encontrado para esta localidade');
-    }
-
-    const calculos = this.calcularDimensionamentoInterno(record.mediacalc, consumo_mes, valor_tarifa);
+    const calculos = CalculosProcess.calcularDimensionamentoInterno(record.mediacalc, consumo_mes, valor_tarifa);
 
     return {
-      consumo_mensal_kwh: this.formatarMoeda(calculos.consumo_mensal_kwh),
+      consumo_mensal_kwh: formatarMoeda(calculos.consumo_mensal_kwh),
       mediacalc: calculos.mediacalc,
-      hsp_mensal: this.formatarMoeda(calculos.hsp_mensal),
-      kwp_minimo: this.formatarMoeda(calculos.kwp_minimo),
+      hsp_mensal: formatarMoeda(calculos.hsp_mensal),
+      kwp_minimo: formatarMoeda(calculos.kwp_minimo),
       localidade: { 
         cidade: record.cidade, 
         estado: record.estado 
@@ -63,163 +39,28 @@ export class CalculosService {
   }
 
   calcularSistemaReal(input: SistemaRealInput): SistemaRealOutput {
-    const { potencia_painel, quantidade_paineis } = input;
-    const kwp_sistema = (potencia_painel * quantidade_paineis) / 1000;
-    return { kwp_sistema: this.formatarMoeda(kwp_sistema) };
+    return CalculosProcess.calcularSistemaReal(input);
   }
 
   calcularGeracaoERetorno(input: GeracaoERetornoInput): GeracaoERetornoOutput {
-    const { kwp_sistema, mediacalc, valor_tarifa, consumo_mes_rs, padrao, valor_investido, quantidade_paineis } = input;
-
-    // 1. Geração Baseada em Irradiação (Sem o fator 0.7 conforme pedido)
-    // mediacalc já vem como HSP Diário do front (ex: 4.276)
-    const hsp_diario = mediacalc; 
-    
-    // Média do Mês (Valor real com decimais)
-    const media_mes_kwh = kwp_sistema * hsp_diario * 30;
-    const geracao_mensal_kwh = Math.round(media_mes_kwh); 
-    const geracao_anual_kwh = media_mes_kwh * 12;
-
-    // 2. Área Estimada (Fator 2.5 solicitado)
-    const area_estimada = (quantidade_paineis || 0) * 2.5;
-
-    // 3. Economia e Valor Pago (Nova Regra baseada em TUSD)
-    // TUSD = Valor do kWh * Geração * 0.51
-    // Imposto = TUSD * 0.18
-    // Fio B = TUSD * 0.22
-    // Valor pago mês = Fio B + Imposto
-    
-    const tusd_interno = valor_tarifa * media_mes_kwh * 0.51;
-    const imposto_faturamento = tusd_interno * 0.18;
-    const fio_b_faturamento = tusd_interno * 0.22;
-    
-    // O valor pago é a soma dos encargos sobre a geração (Fio B + Impostos TUSD)
-    // Nota: Se houver consumo excedente (Geração < Consumo), somamos a diferença.
-    const consumo_kwh = consumo_mes_rs / valor_tarifa;
-    const saldo_devedor_kwh = Math.max(consumo_kwh - media_mes_kwh, 0);
-    const custo_energia_restante = saldo_devedor_kwh * valor_tarifa;
-
-    const valor_pago_mes = this.formatarMoeda(custo_energia_restante + imposto_faturamento + fio_b_faturamento);
-    const valor_pago_ano = this.formatarMoeda(valor_pago_mes * 12);
-
-    // 4. Redução Real e Retorno Financeiro
-    const economia_mensal_rs = this.formatarMoeda(consumo_mes_rs - valor_pago_mes);
-    const economia_anual_rs = this.formatarMoeda(economia_mensal_rs * 12);
-    const porcentagem_reducao = Number((economia_mensal_rs / (consumo_mes_rs || 1)).toFixed(2));
-
-    // Payback = Valor Investido / Economia Mensal
-    let tempo_retorno = "N/A";
-    if (economia_mensal_rs > 0 && valor_investido > 0) {
-      const mesesTotal = valor_investido / economia_mensal_rs;
-      let anos = Math.floor(mesesTotal / 12);
-      let mesesRemaining = Math.ceil(mesesTotal % 12); 
-
-      if (mesesRemaining === 12) {
-        anos += 1;
-        mesesRemaining = 0;
-      }
-      
-      let tempoStr = "";
-      if (anos > 0) tempoStr += `${anos} ${anos === 1 ? 'ano' : 'anos'}`;
-      if (mesesRemaining > 0) tempoStr += `${tempoStr ? ' e ' : ''}${mesesRemaining} ${mesesRemaining === 1 ? 'mês' : 'meses'}`;
-      if (!tempoStr) tempoStr = "Imediato";
-      tempo_retorno = tempoStr;
-    }
-
-    const result = {
-      hsp_diario: Number(hsp_diario.toFixed(3)),
-      hsp_mensal: Number((hsp_diario * 30).toFixed(2)),
-      geracao_mensal_kwh, 
-      geracao_anual_kwh: Number(geracao_anual_kwh.toFixed(2)),
-      area_estimada: Number(area_estimada.toFixed(2)),
-      porcentagem_reducao,
-      valor_pago_mes,
-      valor_pago_ano,
-      economia_mensal_rs,
-      economia_anual_rs,
-      tempo_retorno,
-      media_mes_kwh: Number(media_mes_kwh.toFixed(2))
-    };
-    
-    return result;
+    return CalculosProcess.calcularGeracaoERetorno(input);
   }
 
-  // Seção 3: Dinâmica do Kit
   calcularLicenciamentoKit(input: LicenciamentoKitInput): LicenciamentoKitOutput {
-    const { valorKit, valorPorcentagem } = input;
-    const lucroEquipamentoFinal = valorKit * (valorPorcentagem / 100);
-    const valorKitLicenciado = valorKit + lucroEquipamentoFinal;
-
-    return {
-      lucroEquipamentoFinal: this.formatarMoeda(lucroEquipamentoFinal),
-      valorKitLicenciado: this.formatarMoeda(valorKitLicenciado)
-    };
+    return CalculosProcess.calcularLicenciamentoKit(input);
   }
 
-  // Seção 4: Cascata do Projeto (Matemática Corrigida)
   calcularPrecoFinal(input: PrecoFinalInput): PrecoFinalOutput {
-    const { 
-      valorKitLicenciado, 
-      valorMaoDeObra, 
-      valorEquipamentoLocal, 
-      valorHomologacao, 
-      porcentagemLucroLiquido,
-      quantidade_paineis,
-      potencia_inversor,
-      quantidade_inversores
-    } = input;
-
-    if (porcentagemLucroLiquido > MAX_LUCRO_LIQUIDO_PERMITIDO) {
-      throw new Error(`A porcentagem de lucro líquido desejada excede o limite máximo permitido de ${MAX_LUCRO_LIQUIDO_PERMITIDO}%.`);
-    }
-
-    let finalHomologacao = valorHomologacao || 0;
-    if (potencia_inversor !== undefined) {
-      const pot = typeof potencia_inversor === 'number' ? potencia_inversor : parseFloat(potencia_inversor);
-      const qtd = typeof quantidade_inversores === 'number' ? quantidade_inversores : parseInt(quantidade_inversores);
-      const potenciaTotal = (pot || 0) * (qtd || 1);
-      finalHomologacao = this.calcularValorHomologacao(potenciaTotal);
-    }
-
-    const valorMaoDeObraTotal = valorMaoDeObra * (quantidade_paineis || 0);
-    const valorEquipamentoLocalTotal = valorEquipamentoLocal * (quantidade_paineis || 0);
-
-    const custoDireto = valorKitLicenciado + valorMaoDeObraTotal + valorEquipamentoLocalTotal + finalHomologacao;
-    const margemSeguranca = (valorKitLicenciado / 0.97) - valorKitLicenciado;
-    const divisor = 1 - (porcentagemLucroLiquido / 100) - TAXA_SEGURO - TAXA_IMPOSTO;
-    const precoFinalSugerido = (custoDireto + margemSeguranca - (TAXA_IMPOSTO * valorKitLicenciado)) / divisor;
-
-    const seguro = precoFinalSugerido * TAXA_SEGURO;
-    const lucroLiquidoRs = precoFinalSugerido * (porcentagemLucroLiquido / 100);
-    const imposto = (precoFinalSugerido - valorKitLicenciado) * TAXA_IMPOSTO;
-    const custoProjeto = precoFinalSugerido - lucroLiquidoRs;
-
-    return {
-      custoDireto: this.formatarMoeda(custoDireto),
-      custoProjeto: this.formatarMoeda(custoProjeto),
-      margemSeguranca: this.formatarMoeda(margemSeguranca),
-      seguro: this.formatarMoeda(seguro),
-      lucroLiquidoRs: this.formatarMoeda(lucroLiquidoRs),
-      imposto: this.formatarMoeda(imposto),
-      precoFinalSugerido: this.formatarMoeda(precoFinalSugerido),
-      valorMaoDeObraTotal: this.formatarMoeda(valorMaoDeObraTotal),
-      valorEquipamentoLocalTotal: this.formatarMoeda(valorEquipamentoLocalTotal),
-      valorHomologacao: this.formatarMoeda(finalHomologacao)
-    };
+    return CalculosProcess.calcularPrecoFinal(input);
   }
 
 
   async criarSolicitacaoInicial(pbInstance: any, input: CriarSolicitacaoInput): Promise<any> {
     const { id_cidade, consumo_mes, valor_tarifa } = input;
+    const recordCidade = await CalculosDataFetcher.obterCidadePorId(pbInstance, id_cidade);
 
-    const recordCidade = await pbInstance.collection('cidades_hsp').getOne(id_cidade);
-
-    if (!recordCidade) {
-      throw new Error('Localidade não encontrada para cálculo de HSP.');
-    }
-
-    const calculos = this.calcularDimensionamentoInterno(recordCidade.mediacalc, consumo_mes, valor_tarifa);
-    const kwp_minimo = this.formatarMoeda(calculos.kwp_minimo);
+    const calculos = CalculosProcess.calcularDimensionamentoInterno(recordCidade.mediacalc, consumo_mes, valor_tarifa);
+    const kwp_minimo = formatarMoeda(calculos.kwp_minimo);
 
     const payload = {
       ...input,
@@ -227,217 +68,190 @@ export class CalculosService {
       situacao: 'Aberto'
     };
 
-    const record = await pbInstance.collection('orcamentos').create(payload);
-    return record;
+    return await CalculosDataFetcher.criarOrcamento(pbInstance, payload);
   }
 
   async salvarRefinamentoGerencial(pbInstance: any, input: SalvarRefinamentoInput): Promise<any> {
-    const { 
-      orcamentoId,
-      potencia_painel,
-      quantidade_paineis,
-      peso_painel,
-      marca_modulo,
-      quantidade_inversores,
-      potencia_inversor,
-      modelo_inversor,
-      marca_inversor,
-      tensao_inversor,
-      valorKit,
-      valorPorcentagem,
-      valorMaoDeObra,
-      valorEquipamentoLocal,
-      valorHomologacao,
-      porcentagemLucroLiquido,
-      kwp_minimo,
+    const orcamentoOriginal = await CalculosDataFetcher.obterOrcamentoPorId(pbInstance, input.orcamentoId);
+    
+    const resolvedIdCidade = input.id_cidade || orcamentoOriginal.id_cidade;
+    const resolvedConsumoMes = input.consumo_mes !== undefined ? input.consumo_mes : orcamentoOriginal.consumo_mes;
+    const resolvedValorTarifa = input.valor_tarifa !== undefined ? input.valor_tarifa : orcamentoOriginal.valor_tarifa;
+    const resolvedPadrao = input.padrao || orcamentoOriginal.padrao || 'Trifásico';
+
+    const recordCidade = await CalculosDataFetcher.obterCidadePorId(pbInstance, resolvedIdCidade);
+    const mediacalcNormalizado = CalculosFormatter.normalizarHSP(recordCidade.mediacalc);
+    
+    const dimInterno = CalculosProcess.calcularDimensionamentoInterno(mediacalcNormalizado * 1000, resolvedConsumoMes, resolvedValorTarifa);
+    const kwp_minimo = formatarMoeda(dimInterno.kwp_minimo);
+
+    const sistemaReal = CalculosProcess.calcularSistemaReal({ 
+      potencia_painel: input.potencia_painel, 
+      quantidade_paineis: input.quantidade_paineis 
+    });
+    const kwp_sistema = sistemaReal.kwp_sistema;
+
+    const licenciamento = CalculosProcess.calcularLicenciamentoKit({ 
+      valorKit: input.valorKit, 
+      valorPorcentagem: input.valorPorcentagem || 0 
+    });
+
+    const valorHomologacaoCalculado = CalculosProcess.calcularValorHomologacao(
+      input.quantidade_inversores,
+      input.potencia_inversor
+    );
+
+    const cascata = CalculosProcess.calcularPrecoFinal({
+      valorKitLicenciado: licenciamento.valorKitLicenciado,
+      valorMaoDeObra: input.valorMaoDeObra,
+      valorEquipamentoLocal: input.valorEquipamentoLocal,
+      valorHomologacao: valorHomologacaoCalculado,
+      porcentagemLucroLiquido: input.porcentagemLucroLiquido,
+      quantidade_paineis: input.quantidade_paineis,
+    });
+
+    const retorno = CalculosProcess.calcularGeracaoERetorno({
       kwp_sistema,
-      valor_kit_final,
-      lucro_equipamento,
-      valor_mao_obra_final,
-      valor_equip_local_final,
-      seguro,
-      custo_projeto,
-      imposto,
-      margem_seguranca,
-      lucro_liquido_previsto,
-      preco_final_venda,
-      situacao,
-      observacao,
-      area_estimada,
-      geracao_mes,
-      geracao_ano,
-      valor_pago_mes,
-      valor_pago_ano,
-      porcentagem_reducao,
-      tempo_retorno,
-      garantia_fabrica_modulo,
-      garantia_eficiencia_modulo,
-      garantia_inversor,
-      garantia_instalacao,
-      garantia_estrutura,
-      monitoramento_inversor,
-      material_estrutura,
-      caracteristica_estrutura_1,
-      caracteristica_estrutura_2,
-      caracteristica_estrutura_3,
-      caracteristica_estrutura_4,
-      caracteristica_estrutura_5,
-      composicao_1,
-      composicao_2,
-      composicao_3,
-      composicao_4,
-      composicao_5,
-      nome_cliente,
-      id_cidade,
-      cidade,
-      estado,
-      estrutura,
-      padrao,
-      consumo_mes,
-      valor_tarifa
-    } = input;
+      mediacalc: mediacalcNormalizado,
+      valor_tarifa: resolvedValorTarifa,
+      consumo_mes_rs: resolvedConsumoMes,
+      padrao: resolvedPadrao,
+      valor_investido: cascata.precoFinalSugerido,
+      quantidade_paineis: input.quantidade_paineis,
+    });
 
-    const orcamentoOriginal = await pbInstance.collection('orcamentos').getOne(orcamentoId);
-    if (!orcamentoOriginal) {
-      throw new Error('Orçamento não encontrado.');
-    }
-
-    const kwpSistemaVal = typeof kwp_sistema === 'number' ? kwp_sistema : (parseFloat(kwp_sistema) || 0);
-    const composicao1 = `${quantidade_paineis} Painéis, ${marca_modulo}, ${kwpSistemaVal.toFixed(2)} kWp`;
+    const formComercial = CalculosFormatter.formatarComposicaoComercial(
+      input.quantidade_paineis,
+      input.marca_modulo,
+      input.potencia_painel,
+      input.quantidade_inversores,
+      input.marca_inversor || '',
+      input.modelo_inversor || '',
+      input.potencia_inversor,
+      kwp_sistema
+    );
 
 
     const payloadPocketBase = {
-      nome_cliente: nome_cliente !== undefined ? nome_cliente : orcamentoOriginal.nome_cliente,
-      id_cidade: id_cidade !== undefined ? id_cidade : orcamentoOriginal.id_cidade,
-      cidade: cidade !== undefined ? cidade : orcamentoOriginal.cidade,
-      estado: estado !== undefined ? estado : orcamentoOriginal.estado,
-      estrutura: estrutura !== undefined ? estrutura : orcamentoOriginal.estrutura,
-      padrao: padrao !== undefined ? padrao : orcamentoOriginal.padrao,
-      consumo_mes: consumo_mes !== undefined ? consumo_mes : orcamentoOriginal.consumo_mes,
-      valor_tarifa: valor_tarifa !== undefined ? valor_tarifa : orcamentoOriginal.valor_tarifa,
-      potencia_painel,
-      qtd_paineis: quantidade_paineis,
-      peso_painel,
-      marca_painel: marca_modulo,
-      valor_kit: valorKit,
-      porcentagem_kit: valorPorcentagem,
-      lucro_liquido_perc: porcentagemLucroLiquido,
-      mao_obra: valorMaoDeObra,
-      equipamento_local: valorEquipamentoLocal,
-      valor_homologacao: calculatedHomologacao,
-      chpzdpth: composicao1,
-      observacao: observacao || orcamentoOriginal.observacao,
-      
-      qtd_inversores: quantidade_inversores,
-      potencia_inversor,
-      modelo_inversor: modelo_inversor || "",
-      marca_inversor: marca_inversor || "",
-      tensao_inversor: typeof tensao_inversor === 'string' ? (parseInt(tensao_inversor) || 0) : (tensao_inversor || 0),
+      nome_cliente: input.nome_cliente !== undefined ? input.nome_cliente : orcamentoOriginal.nome_cliente,
+      id_cidade: resolvedIdCidade,
+      cidade: input.cidade !== undefined ? input.cidade : orcamentoOriginal.cidade,
+      estado: input.estado !== undefined ? input.estado : orcamentoOriginal.estado,
+      estrutura: input.estrutura !== undefined ? input.estrutura : orcamentoOriginal.estrutura,
+      padrao: resolvedPadrao,
+      consumo_mes: resolvedConsumoMes,
+      valor_tarifa: resolvedValorTarifa,
+      potencia_painel: input.potencia_painel,
+      qtd_paineis: input.quantidade_paineis,
+      peso_painel: input.peso_painel,
+      marca_painel: input.marca_modulo,
+      valor_kit: input.valorKit,
+      porcentagem_kit: input.valorPorcentagem,
+      lucro_liquido_perc: input.porcentagemLucroLiquido,
+      mao_obra: input.valorMaoDeObra,
+      equipamento_local: input.valorEquipamentoLocal,
+      valor_homologacao: valorHomologacaoCalculado,
+      chpzdpth: formComercial.composicao_resumo,
+      observacao: input.observacao || orcamentoOriginal.observacao,
+
+      qtd_inversores: input.quantidade_inversores,
+      potencia_inversor: input.potencia_inversor,
+      modelo_inversor: input.modelo_inversor || '',
+      marca_inversor: input.marca_inversor || '',
+      tensao_inversor: typeof input.tensao_inversor === 'string' ? (parseInt(input.tensao_inversor) || 0) : (input.tensao_inversor || 0),
 
       kwp_minimo,
       kwp_sistema,
-      valor_kit_final,
-      lucro_equipamento,
-      valor_mao_obra_final,
-      valor_equip_local_final,
-      seguro,
-      custo_projeto,
-      imposto,
-      margem_seguranca,
-      lucro_liquido_previsto,
-      preco_final_venda,
-      situacao: situacao || orcamentoOriginal.situacao || "Aberto",
-      area_estimada,
-      geracao_mes,
-      geracao_ano,
-      valor_pago_mes,
-      valor_pago_ano,
-      porcentagem_reducao,
-      tempo_retorno,
+      valor_kit_final: licenciamento.valorKitLicenciado,
+      lucro_equipamento: licenciamento.lucroEquipamentoFinal,
+      valor_mao_obra_final: cascata.valorMaoDeObraTotal,
+      valor_equip_local_final: cascata.valorEquipamentoLocalTotal,
+      seguro: cascata.seguro,
+      custo_projeto: cascata.custoProjeto,
+      imposto: cascata.imposto,
+      margem_seguranca: cascata.margemSeguranca,
+      lucro_liquido_previsto: cascata.lucroLiquidoRs,
+      preco_final_venda: cascata.precoFinalSugerido,
+      situacao: orcamentoOriginal.situacao || 'Aberto',
+      area_estimada: retorno.area_estimada,
+      geracao_mes: retorno.media_mes_kwh,
+      geracao_ano: retorno.geracao_anual_kwh,
+      valor_pago_mes: retorno.valor_pago_mes,
+      valor_pago_ano: retorno.valor_pago_ano,
+      porcentagem_reducao: retorno.porcentagem_reducao,
+      tempo_retorno: retorno.tempo_retorno,
 
-      // Novos campos de Garantias e Suporte
-      garantia_fabrica_modulo,
-      garantia_eficiencia_modulo,
-      garantia_inversor,
-      garantia_instalacao,
-      garantia_estrutura,
-      monitoramento_inversor,
-      material_structure: material_estrutura,
+      garantia_fabrica_modulo: input.garantia_fabrica_modulo,
+      garantia_eficiencia_modulo: input.garantia_eficiencia_modulo,
+      garantia_inversor: input.garantia_inversor,
+      garantia_instalacao: input.garantia_instalacao,
+      garantia_estrutura: input.garantia_estrutura,
+      monitoramento_inversor: input.monitoramento_inversor,
+      material_structure: input.material_estrutura,
 
-      // Novos campos de Características da Estrutura
-      caracteristica_estrutura_1,
-      caracteristica_estrutura_2,
-      caracteristica_estrutura_3,
-      caracteristica_estrutura_4,
-      caracteristica_estrutura_5,
+      caracteristica_estrutura_1: input.caracteristica_estrutura_1,
+      caracteristica_estrutura_2: input.caracteristica_estrutura_2,
+      caracteristica_estrutura_3: input.caracteristica_estrutura_3,
+      caracteristica_estrutura_4: input.caracteristica_estrutura_4,
+      caracteristica_estrutura_5: input.caracteristica_estrutura_5,
 
-      // Novos campos de Composição
-      composicao_1,
-      composicao_2,
-      composicao_3,
-      composicao_4,
-      composicao_5
+      composicao_1: formComercial.composicao_1,
+      composicao_2: formComercial.composicao_2,
+      composicao_3: formComercial.composicao_3,
+      composicao_4: '',
+      composicao_5: '',
     };
 
-    const registroAtualizado = await pbInstance.collection('orcamentos').update(orcamentoId, payloadPocketBase);
-    return registroAtualizado;
+    return await CalculosDataFetcher.atualizarOrcamento(pbInstance, input.orcamentoId, payloadPocketBase);
   }
 
   async obterMetricasDashboard(pbInstance: any, userId?: string, isAdmin?: boolean): Promise<any> {
-    
     let filter = '';
     if (!isAdmin && userId) {
       filter = `user_id = "${userId}"`;
     }
-
-    // Buscamos apenas os campos necessários (id, situacao, nome_cliente, estado) para poupar rede/banco
-    const records = await pbInstance.collection('orcamentos').getFullList({
-      filter,
-      fields: 'id,situacao,nome_cliente,estado,user_id'
-    });
-
-    const total = records.length;
-    const abertos = records.filter((r: any) => r.situacao === 'Aberto').length;
-    const concluidos = records.filter((r: any) => r.situacao === 'Técnico Finalizado').length;
-    const uniqueClientNames = new Set(
-      records
-        .map((r: any) => r.nome_cliente ? r.nome_cliente.trim().toLowerCase() : '')
-        .filter(Boolean)
+    
+    const records = await CalculosDataFetcher.listarOrcamentosSimplificados(pbInstance, filter);
+    const processado = CalculosProcess.processarMetricasDashboard(records);
+    return CalculosFormatter.formatarDashboardResult(
+      processado.total, 
+      processado.abertos, 
+      processado.concluidos, 
+      processado.clientes, 
+      processado.stats
     );
-    const clientes = uniqueClientNames.size;
+  }
 
-    // Calcular dados demográficos
-    const stats: Record<string, number> = {};
-    records.forEach((r: any) => {
-      if (r.estado) {
-        const estado = r.estado.toUpperCase();
-        stats[estado] = (stats[estado] || 0) + 1;
-      }
-    });
+  async atualizarPrecoVenda(pbInstance: any, id: string, preco_final_venda: number): Promise<any> {
+    const orcamento = await CalculosDataFetcher.obterOrcamentoPorId(pbInstance, id);
 
-    const demographics = Object.entries(stats)
-      .map(([name, count]) => ({
-        name,
-        count,
-        percentage: total > 0 ? Math.round((count / total) * 100) : 0
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 4); // Top 4 UFs como no DemographicCard
+    const seguro = formatarMoeda(preco_final_venda * TAXA_SEGURO);
+    const kitLicenciado = orcamento.valor_kit_final || 0;
+    const imposto = formatarMoeda(Math.max(preco_final_venda - kitLicenciado, 0) * TAXA_IMPOSTO);
+    const margemSeguranca = orcamento.margem_seguranca || 0;
+    const custoDireto =
+      (orcamento.valor_kit_final || 0) +
+      (orcamento.valor_mao_obra_final || 0) +
+      (orcamento.valor_equip_local_final || 0) +
+      (orcamento.valor_homologacao || 0);
+    const custoProjeto = formatarMoeda(custoDireto + margemSeguranca + seguro + imposto);
+    const lucroLiquidoPrevisto = formatarMoeda(preco_final_venda - custoProjeto);
+    const lucroLiquidoPerc = formatarMoeda(preco_final_venda > 0 ? (lucroLiquidoPrevisto / preco_final_venda) * 100 : 0);
 
-    return {
-      kpis: {
-        total,
-        abertos,
-        concluidos,
-        clientes
-      },
-      demographics
+    const updateData = {
+      preco_final_venda,
+      seguro,
+      imposto,
+      custo_projeto: custoProjeto,
+      lucro_liquido_previsto: lucroLiquidoPrevisto,
+      lucro_liquido_perc: lucroLiquidoPerc,
     };
+
+    return await CalculosDataFetcher.atualizarOrcamento(pbInstance, id, updateData);
   }
 
   async obterTodosUsuarios(pbInstance: any): Promise<any> {
-    const records = await pbInstance.collection('users').getFullList();
-    return records;
+    return await CalculosDataFetcher.listarUsuarios(pbInstance);
   }
 
   async listarTodosOrcamentos(pbInstance: any, userId?: string, isAdmin?: boolean): Promise<any> {
@@ -445,48 +259,41 @@ export class CalculosService {
     if (!isAdmin && userId) {
       filter = `user_id = "${userId}"`;
     }
-    const records = await pbInstance.collection('orcamentos').getFullList({
-      sort: '-created',
-      expand: 'user_id',
-      filter
-    });
-    return records;
+    return await CalculosDataFetcher.listarOrcamentos(pbInstance, filter);
   }
 
   async obterCidadesHSP(pbInstance: any, search?: string): Promise<any> {
-    let filter = '';
-    if (search) {
-      const lowerSearch = search.trim().toLowerCase();
-      filter = pbInstance.filter('cidade ~ {:search} || estado ~ {:search}', { search: lowerSearch });
-    }
-    const records = await pbInstance.collection('cidades_hsp').getFullList({
-      filter,
-      sort: 'cidade'
-    });
-    return records;
+    const records = await CalculosDataFetcher.obterCidadesHSP(pbInstance, search);
+    return records.map((r: any) => ({
+      ...r,
+      mediacalc: CalculosFormatter.normalizarHSP(r.mediacalc)
+    }));
   }
 
   async obterOrcamentoPorId(pbInstance: any, id: string): Promise<any> {
-    const record = await pbInstance.collection('orcamentos').getOne(id, {
-      expand: 'user_id'
-    });
-    return record;
+    return await CalculosDataFetcher.obterOrcamentoPorId(pbInstance, id);
   }
 
   async criarNovoUsuario(pbInstance: any, input: any): Promise<any> {
-    const record = await pbInstance.collection('users').create(input);
-    return record;
+    return await CalculosDataFetcher.criarUsuario(pbInstance, input);
   }
 
   async obterCidadePorId(pbInstance: any, id: string): Promise<any> {
-    const record = await pbInstance.collection('cidades_hsp').getOne(id);
-    return record;
+    const record = await CalculosDataFetcher.obterCidadePorId(pbInstance, id);
+    return {
+      ...record,
+      mediacalc: CalculosFormatter.normalizarHSP(record.mediacalc)
+    };
   }
 
   async atualizarOrcamentoParcial(pbInstance: any, id: string, data: any): Promise<any> {
-    const record = await pbInstance.collection('orcamentos').update(id, data);
-    return record;
+    return await CalculosDataFetcher.atualizarOrcamento(pbInstance, id, data);
+  }
+
+  obterConfigMargensLucro(): ConfigMargensLucroOutput {
+    return CalculosProcess.obterConfigMargensLucro();
   }
 }
 
 export default new CalculosService();
+
