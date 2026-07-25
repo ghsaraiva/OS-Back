@@ -1,13 +1,17 @@
 name: Deploy Backend to Oracle VPS
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Test and Validate PR"]
+    types:
+      - completed
     branches:
       - main 
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Deploy via SSH
