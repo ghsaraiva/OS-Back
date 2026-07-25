@@ -76,8 +76,6 @@ export interface PrecoFinalInput {
   potencia_inversor?: number;
   porcentagemLucroLiquido: number;
   quantidade_paineis: number;
-  potencia_inversor?: number;
-  quantidade_inversores?: number;
 }
 
 export interface PrecoFinalOutput {
@@ -132,7 +130,7 @@ export interface SalvarRefinamentoInput {
   valorHomologacao: number;
   porcentagemLucroLiquido: number;
   observacao?: string;
-  
+
   // Novos campos de Sistema e Geração (Mantemos apenas os inputs)
   area_estimada?: number;
 
@@ -164,4 +162,3 @@ export interface ConfigMargensLucroOutput {
   min: number;
   max: number;
 }
-

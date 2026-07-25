@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import calculosService from '../services/calculos.service';
+import { PdfService } from '../services/pdf.service';
 
 export class CalculosController {
+  private pdfService = new PdfService();
+
   dimensionamentoMinimo = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id_cidade, consumo_mes, valor_tarifa } = req.body;
@@ -271,6 +274,36 @@ export class CalculosController {
       return res.status(201).json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Erro ao criar usuário' });
+    }
+  };
+
+  gerarPdf = async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      if (!id) {
+        return res.status(400).json({ error: 'ID do orçamento é obrigatório.' });
+      }
+
+      const orcamento = await calculosService.obterOrcamentoPorId(req.pb!, id);
+      if (!orcamento) {
+        return res.status(404).json({ error: 'Orçamento não encontrado.' });
+      }
+
+      const pdfBuffer = await PdfService.gerarPdfProposta(orcamento);
+
+      const formData = new FormData();
+      formData.append('pdf_proposta', new Blob([pdfBuffer], { type: 'application/pdf' }), 'Proposta_Comercial.pdf');
+
+      // Update record in PocketBase
+      const updatedRecord = await req.pb!.collection('orcamentos').update(id, formData);
+
+      const baseUrl = process.env.POCKETBASE_URL || 'http://127.0.0.1:8090';
+      const pdfUrl = `${baseUrl}/api/files/orcamentos/${id}/${updatedRecord.pdf_proposta}`;
+
+      return res.json({ success: true, pdfUrl });
+    } catch (error: any) {
+      console.error('Erro ao gerar PDF:', error);
+      res.status(500).json({ error: error.message || 'Erro interno ao gerar PDF' });
     }
   };
 }
