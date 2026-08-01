@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import calculosService from '../services/calculos.service';
+import { PdfService } from '../services/pdf.service';
 
 export class CalculosController {
+  private pdfService = new PdfService();
+
   dimensionamentoMinimo = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id_cidade, consumo_mes, valor_tarifa } = req.body;
@@ -271,6 +274,53 @@ export class CalculosController {
       return res.status(201).json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Erro ao criar usuário' });
+    }
+  };
+
+  gerarPdf = async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      if (!id) {
+        return res.status(400).json({ error: 'ID do orçamento é obrigatório.' });
+      }
+
+      const orcamento = await calculosService.obterOrcamentoPorId(req.pb!, id);
+      if (!orcamento) {
+        return res.status(404).json({ error: 'Orçamento não encontrado.' });
+      }
+
+      const pdfBuffer = await PdfService.gerarPdfProposta(orcamento);
+
+      let nomeBase = 'cliente';
+      if (orcamento.nome_cliente) {
+        const parts = orcamento.nome_cliente.trim().split(/\s+/);
+        if (parts.length >= 2) {
+          nomeBase = `${parts[0]}_${parts[parts.length - 1]}`;
+        } else if (parts.length === 1) {
+          nomeBase = parts[0];
+        }
+      }
+      
+      // Remove caracteres especiais para evitar problemas na URL e deixa em letras minúsculas
+      nomeBase = nomeBase.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const nomeArquivo = `proposta_${nomeBase}.pdf`;
+
+      // Update record in PocketBase using plain object and File
+      const pdfFile = new File([new Uint8Array(pdfBuffer)], nomeArquivo, { type: 'application/pdf' });
+      const updatedRecord = await req.pb!.collection('orcamentos').update(id, {
+        pdf_proposta: pdfFile
+      });
+
+      const baseUrl = process.env.POCKETBASE_URL || 'http://127.0.0.1:8090';
+      const pdfUrl = `${baseUrl}/api/files/orcamentos/${id}/${updatedRecord.pdf_proposta}`;
+
+      return res.json({ success: true, pdfUrl });
+    } catch (error: any) {
+      console.error('Erro ao gerar PDF:', error);
+      if (error.response?.data) {
+        console.error('Detalhes do erro do PocketBase:', JSON.stringify(error.response.data, null, 2));
+      }
+      res.status(500).json({ error: error.message || 'Erro interno ao gerar PDF' });
     }
   };
 }

@@ -20,7 +20,7 @@ export async function authenticatePB() {
 
   authPromise = (async () => {
     try {
-      await pb.collection('users').authWithPassword(
+      await pb.admins.authWithPassword(
         process.env.POCKETBASE_ADMIN_EMAIL || '',
         process.env.POCKETBASE_ADMIN_PASSWORD || ''
       );

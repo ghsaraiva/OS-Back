@@ -42,6 +42,10 @@ export class CalculosService {
     return CalculosProcess.calcularSistemaReal(input);
   }
 
+  calcularValorHomologacao(potenciaTotal: number): number {
+    return CalculosProcess.calcularValorHomologacao(1, potenciaTotal);
+  }
+
   calcularGeracaoERetorno(input: GeracaoERetornoInput): GeracaoERetornoOutput {
     return CalculosProcess.calcularGeracaoERetorno(input);
   }
@@ -134,6 +138,8 @@ export class CalculosService {
 
     const payloadPocketBase = {
       nome_cliente: input.nome_cliente !== undefined ? input.nome_cliente : orcamentoOriginal.nome_cliente,
+      telefone_cliente: input.telefone_cliente !== undefined ? input.telefone_cliente : orcamentoOriginal.telefone_cliente,
+      email_cliente: input.email_cliente !== undefined ? input.email_cliente : orcamentoOriginal.email_cliente,
       id_cidade: resolvedIdCidade,
       cidade: input.cidade !== undefined ? input.cidade : orcamentoOriginal.cidade,
       estado: input.estado !== undefined ? input.estado : orcamentoOriginal.estado,
@@ -187,7 +193,7 @@ export class CalculosService {
       garantia_instalacao: input.garantia_instalacao,
       garantia_estrutura: input.garantia_estrutura,
       monitoramento_inversor: input.monitoramento_inversor,
-      material_structure: input.material_estrutura,
+      material_structure: input.material_structure,
 
       caracteristica_estrutura_1: input.caracteristica_estrutura_1,
       caracteristica_estrutura_2: input.caracteristica_estrutura_2,

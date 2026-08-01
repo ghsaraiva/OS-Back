@@ -1,5 +1,7 @@
 export interface DimensionamentoMinimoInput {
   nome_cliente?: string;
+  telefone_cliente?: string;
+  email_cliente?: string;
   cidade: string;
   estado: string;
   id_cidade: string;
@@ -76,8 +78,6 @@ export interface PrecoFinalInput {
   potencia_inversor?: number;
   porcentagemLucroLiquido: number;
   quantidade_paineis: number;
-  potencia_inversor?: number;
-  quantidade_inversores?: number;
 }
 
 export interface PrecoFinalOutput {
@@ -90,12 +90,14 @@ export interface PrecoFinalOutput {
   valorMaoDeObraTotal: number;
   valorEquipamentoLocalTotal: number;
   custoDireto: number; // Novo campo para o custo bruto sem impostos/margem
-  valorHomologacaoCalculado: string;
+  valorHomologacaoCalculado: number;
 }
 
 export interface CriarSolicitacaoInput {
   user_id: string;
   nome_cliente: string;
+  telefone_cliente?: string;
+  email_cliente?: string;
   estado: string;
   cidade: string;
   id_cidade: string;
@@ -119,6 +121,8 @@ export interface SalvarRefinamentoInput {
   tensao_inversor: any; // Pode vir como string do form e ser convertida
   valorKit: number;
   nome_cliente?: string;
+  telefone_cliente?: string;
+  email_cliente?: string;
   id_cidade?: string;
   cidade?: string;
   estado?: string;
@@ -132,7 +136,7 @@ export interface SalvarRefinamentoInput {
   valorHomologacao: number;
   porcentagemLucroLiquido: number;
   observacao?: string;
-  
+
   // Novos campos de Sistema e Geração (Mantemos apenas os inputs)
   area_estimada?: number;
 
@@ -143,7 +147,7 @@ export interface SalvarRefinamentoInput {
   garantia_instalacao?: string;
   garantia_estrutura?: string;
   monitoramento_inversor?: string;
-  material_estrutura?: string;
+  material_structure?: string;
 
   // Novos campos de Características da Estrutura
   caracteristica_estrutura_1?: string;
@@ -164,4 +168,3 @@ export interface ConfigMargensLucroOutput {
   min: number;
   max: number;
 }
-
