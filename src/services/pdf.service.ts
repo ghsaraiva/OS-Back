@@ -113,9 +113,11 @@ export class PdfService {
               textField.enableMultiline();
             }
 
-            // Define tamanho de fonte dinâmico (auto-scaling) apenas para material_structure
+            // Define tamanho de fonte dinâmico (auto-scaling) para textos grandes ou campos específicos
             if (currentText === 'material_structure') {
               textField.setFontSize(0);
+            } else if ((currentText === 'cidade_estado' || currentText === 'nome_cliente') && valueToSet.length > 24) {
+              textField.setFontSize(0); // Diminui a fonte automaticamente para caber na caixa
             }
 
             // Se for um dos campos de garantia da última página, removemos a palavra 'anos'
