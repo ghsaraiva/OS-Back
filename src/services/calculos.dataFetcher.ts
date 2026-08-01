@@ -40,7 +40,7 @@ export class CalculosDataFetcher {
   static async listarOrcamentosSimplificados(pbInstance: any, filter: string): Promise<any> {
     return pbInstance.collection('orcamentos').getFullList({
       filter,
-      fields: 'id,situacao,nome_cliente,estado,user_id'
+      fields: 'id,situacao,nome_cliente,telefone_cliente,email_cliente,estado,user_id'
     });
   }
 

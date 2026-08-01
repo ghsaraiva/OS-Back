@@ -38,6 +38,7 @@ router.get('/budgets', calculosController.listarOrcamentos);
 router.get('/budgets/:id', calculosController.obterOrcamento);
 router.patch('/budgets/:id/preco-venda', calculosController.atualizarPrecoVenda);
 router.patch('/budgets/:id', calculosController.atualizarOrcamento);
+router.post('/gerar-pdf/:id', calculosController.gerarPdf);
 
 // Listagem de Cidades com HSP
 router.get('/cidades', calculosController.listarCidades);
