@@ -12,7 +12,7 @@ export class PdfService {
    * Generates the PDF proposal replacing AcroForm TextFields with real formatted data.
    */
   static async gerarPdfProposta(dadosOrcamento: any): Promise<Buffer> {
-    const templatePath = path.resolve(__dirname, '../assets/templates/proposta_sofia_template.pdf');
+    const templatePath = path.join(process.cwd(), 'src', 'assets', 'templates', 'proposta_sofia_template.pdf');
     const templateBytes = await fs.readFile(templatePath);
     
     // Load with pdf-lib
@@ -21,7 +21,7 @@ export class PdfService {
     
     let customFont;
     try {
-      const fontPath = path.resolve(__dirname, '../assets/fonts/Sora-Medium.ttf');
+      const fontPath = path.join(process.cwd(), 'src', 'assets', 'fonts', 'Sora-Medium.ttf');
       const fontBytes = await fs.readFile(fontPath);
       customFont = await pdfDocLib.embedFont(fontBytes);
     } catch (err) {

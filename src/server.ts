@@ -10,6 +10,9 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Configuração para proxy reverso (Caddy, Nginx, etc)
+app.set('trust proxy', 1);
+
 // 1. Blindagem de cabeçalhos HTTP com Helmet
 app.use(helmet());
 
