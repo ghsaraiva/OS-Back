@@ -44,9 +44,16 @@ describe.skipIf(skipIntegration)('Integração PocketBase (Real Database Integra
     }
 
     try {
+      // Tentar pegar um usuário válido para usar no orçamento (já que somos admins, podemos ler)
+      let testUserId = '';
+      try {
+        const users = await pb.collection('users').getList(1, 1);
+        if (users.items.length > 0) testUserId = users.items[0].id;
+      } catch(e) {}
+      
       // 1. Criar Orçamento Inicial
       const payloadInicial = {
-        user_id: pb.authStore.model?.id || '',
+        user_id: testUserId || undefined, // Usa um ID de usuário válido ou omite se não for obrigatório
         nome_cliente: 'Test Integration Client',
         id_cidade: testCity.id,
         cidade: testCity.cidade,
@@ -59,8 +66,14 @@ describe.skipIf(skipIntegration)('Integração PocketBase (Real Database Integra
         observacao: 'Orçamento de teste de integração.'
       };
 
-      const orcamentoCriado = await pb.collection('orcamentos').create(payloadInicial);
-      console.log('🚀 Orçamento criado com sucesso. ID:', orcamentoCriado.id);
+      let orcamentoCriado;
+      try {
+        orcamentoCriado = await pb.collection('orcamentos').create(payloadInicial);
+        console.log('🚀 Orçamento criado com sucesso. ID:', orcamentoCriado.id);
+      } catch (err: any) {
+        console.error('Validation errors:', JSON.stringify(err.response?.data, null, 2));
+        throw err;
+      }
       
       expect(orcamentoCriado.id).toBeDefined();
       expect(orcamentoCriado.nome_cliente).toBe(payloadInicial.nome_cliente);
