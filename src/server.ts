@@ -8,7 +8,7 @@ import routes from './routes';
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3000;
 
 // 1. Blindagem de cabeçalhos HTTP com Helmet
 app.use(helmet());
