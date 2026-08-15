@@ -34,11 +34,14 @@ router.get('/dashboard/stats', calculosController.dashboardStats);
 // Listagem de Usuários e Orçamentos via API segura
 router.get('/users', authorizeRoles(['admin']), calculosController.listarUsuarios);
 router.post('/users', authorizeRoles(['admin']), calculosController.criarUsuario);
+// Troca de senha de primeiro acesso (qualquer usuário autenticado, para si mesmo)
+router.patch('/users/:id/alterar-senha', calculosController.alterarSenhaPrimeiroAcesso);
 router.get('/budgets', calculosController.listarOrcamentos);
 router.get('/budgets/:id', calculosController.obterOrcamento);
 router.patch('/budgets/:id/preco-venda', calculosController.atualizarPrecoVenda);
 router.patch('/budgets/:id', calculosController.atualizarOrcamento);
 router.post('/gerar-pdf/:id', calculosController.gerarPdf);
+router.post('/enviar-email-proposta', calculosController.enviarEmailProposta);
 
 // Listagem de Cidades com HSP
 router.get('/cidades', calculosController.listarCidades);

@@ -1,3 +1,5 @@
+import pb, { authenticatePB } from '../config/pocketbase';
+
 export class CalculosDataFetcher {
   static async obterCidadePorId(pbInstance: any, id: string): Promise<any> {
     const record = await pbInstance.collection('cidades_hsp').getOne(id);
@@ -57,6 +59,29 @@ export class CalculosDataFetcher {
   }
 
   static async criarUsuario(pbInstance: any, data: any): Promise<any> {
-    return pbInstance.collection('users').create(data);
+    return pbInstance.collection('users').create({
+      ...data,
+      primeiro_acesso: true,
+    });
+  }
+
+  /**
+   * Usa a instância admin (backend@orcamentos.com como superusuário no PocketBase)
+   * para atualizar a senha, contornando a updateRule da coleção users.
+   * O controller já garante que o usuário só altera a própria senha.
+   */
+  static async alterarSenhaPrimeiroAcesso(
+    _pbInstance: any,
+    userId: string,
+    password: string,
+    passwordConfirm: string
+  ): Promise<any> {
+    await authenticatePB();
+
+    return pb.collection('users').update(userId, {
+      password,
+      passwordConfirm,
+      primeiro_acesso: false,
+    });
   }
 }

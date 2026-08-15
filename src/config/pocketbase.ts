@@ -10,7 +10,7 @@ pb.autoCancellation(false);
 
 let authPromise: Promise<void> | null = null;
 
-// Função para garantir que o backend está autenticado
+// Função para garantir que o backend está autenticado como superusuário (admin)
 export async function authenticatePB() {
   if (pb.authStore.isValid) return;
 
@@ -20,7 +20,8 @@ export async function authenticatePB() {
 
   authPromise = (async () => {
     try {
-      await pb.admins.authWithPassword(
+      // PocketBase SDK v0.22+: pb.admins foi substituído por _superusers
+      await pb.collection('_superusers').authWithPassword(
         process.env.POCKETBASE_ADMIN_EMAIL || '',
         process.env.POCKETBASE_ADMIN_PASSWORD || ''
       );
@@ -33,4 +34,3 @@ export async function authenticatePB() {
 }
 
 export default pb;
-

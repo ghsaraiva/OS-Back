@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import calculosRoutes from './calculos.routes';
+import authRoutes from './auth.routes';
 
 const router = Router();
 
-// Agrupador de rotas
-router.use('/calculos', calculosRoutes);
+// Rotas públicas de autenticação
+router.use('/auth', authRoutes);
 
-// Futuras rotas podem ser adicionadas aqui
-// router.use('/auth', authRoutes);
+// Rotas protegidas do sistema
+router.use('/calculos', calculosRoutes);
 
 export default router;
