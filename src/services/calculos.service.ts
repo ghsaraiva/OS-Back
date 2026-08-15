@@ -284,6 +284,20 @@ export class CalculosService {
     return await CalculosDataFetcher.criarUsuario(pbInstance, input);
   }
 
+  async alterarSenhaPrimeiroAcesso(
+    pbInstance: any,
+    userId: string,
+    password: string,
+    passwordConfirm: string
+  ): Promise<any> {
+    return await CalculosDataFetcher.alterarSenhaPrimeiroAcesso(
+      pbInstance,
+      userId,
+      password,
+      passwordConfirm
+    );
+  }
+
   async obterCidadePorId(pbInstance: any, id: string): Promise<any> {
     const record = await CalculosDataFetcher.obterCidadePorId(pbInstance, id);
     return {

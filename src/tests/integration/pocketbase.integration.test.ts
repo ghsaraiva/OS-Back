@@ -11,7 +11,6 @@ describe.skipIf(skipIntegration)('Integração PocketBase (Real Database Integra
     // Tenta autenticar o cliente antes de rodar os testes
     try {
       await authenticatePB();
-      console.log('✅ Autenticado com sucesso no PocketBase para os testes.');
     } catch (error: any) {
       console.error('⚠️ Falha ao autenticar no PocketBase. Verifique suas credenciais em .env:', error.message);
     }
@@ -21,9 +20,6 @@ describe.skipIf(skipIntegration)('Integração PocketBase (Real Database Integra
     try {
       // Busca as primeiras 5 cidades
       const resultList = await pb.collection('cidades_hsp').getList(1, 5);
-      
-      console.log(`Cidades encontradas no banco: ${resultList.items.length}`);
-      console.log('Total de registros na coleção cidades_hsp:', resultList.totalItems);
       
       expect(resultList.items).toBeDefined();
       expect(Array.isArray(resultList.items)).toBe(true);
@@ -69,7 +65,6 @@ describe.skipIf(skipIntegration)('Integração PocketBase (Real Database Integra
       let orcamentoCriado;
       try {
         orcamentoCriado = await pb.collection('orcamentos').create(payloadInicial);
-        console.log('🚀 Orçamento criado com sucesso. ID:', orcamentoCriado.id);
       } catch (err: any) {
         console.error('Validation errors:', JSON.stringify(err.response?.data, null, 2));
         throw err;
@@ -91,7 +86,6 @@ describe.skipIf(skipIntegration)('Integração PocketBase (Real Database Integra
       };
 
       const orcamentoEditado = await pb.collection('orcamentos').update(testBudget.id, payloadRefinamento);
-      console.log('✏️ Orçamento editado com sucesso.');
 
       expect(orcamentoEditado.situacao).toBe('Aprovado');
       expect(orcamentoEditado.qtd_paineis).toBe(12);
@@ -101,7 +95,6 @@ describe.skipIf(skipIntegration)('Integração PocketBase (Real Database Integra
       let deletedSuccessfully = false;
       try {
         await pb.collection('orcamentos').delete(testBudget.id);
-        console.log('🧹 Orçamento de teste excluído com sucesso.');
         deletedSuccessfully = true;
       } catch (err: any) {
         if (err.status === 403 || err.status === 400) {
@@ -131,7 +124,6 @@ describe.skipIf(skipIntegration)('Integração PocketBase (Real Database Integra
       if (testBudget && testBudget.id) {
         try {
           await pb.collection('orcamentos').delete(testBudget.id);
-          console.log('🧹 Cleanup de emergência executado.');
         } catch (cleanErr) {}
       }
       throw error;

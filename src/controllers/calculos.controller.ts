@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import calculosService from '../services/calculos.service';
 import { PdfService } from '../services/pdf.service';
+import { EmailService } from '../services/email.service';
 
 export class CalculosController {
   private pdfService = new PdfService();
@@ -271,9 +272,74 @@ export class CalculosController {
         return res.status(403).json({ error: 'Acesso Proibido: Permissão insuficiente.' });
       }
       const result = await calculosService.criarNovoUsuario(req.pb!, req.body);
+
+      // Dispara e-mail de boas-vindas assíncrono com dados de acesso e senha temporária
+      if (req.body.email && req.body.password) {
+        EmailService.enviarBoasVindasNovoUsuario({
+          toEmail: req.body.email,
+          userName: req.body.name || 'Colaborador',
+          tempPassword: req.body.password,
+          tipoAcesso: req.body.tipo_acesso === 'admin' ? 'Administrador' : 'Vendedor',
+        }).catch(() => {});
+      }
+
       return res.status(201).json(result);
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Erro ao criar usuário' });
+      const responseData = error?.response?.data || error?.data || {};
+
+      if (
+        responseData.email?.code === 'validation_not_unique' ||
+        responseData.email?.message?.toLowerCase().includes('already') ||
+        error?.message?.toLowerCase().includes('email')
+      ) {
+        return res.status(400).json({ error: 'Este e-mail já está cadastrado no sistema.' });
+      }
+
+      if (
+        responseData.username?.code === 'validation_not_unique' ||
+        responseData.username?.message?.toLowerCase().includes('already')
+      ) {
+        return res.status(400).json({ error: 'Este nome de usuário já está em uso.' });
+      }
+
+      const status = error?.status || error?.response?.status || 400;
+      res.status(status).json({ error: error?.message || 'Erro ao criar usuário.' });
+    }
+  };
+
+  alterarSenhaPrimeiroAcesso = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { password, passwordConfirm } = req.body;
+
+      // Apenas o próprio usuário pode trocar sua senha de primeiro acesso
+      if (req.user?.id !== id) {
+        return res.status(403).json({ error: 'Acesso Proibido: você só pode alterar sua própria senha.' });
+      }
+
+      if (!password || !passwordConfirm) {
+        return res.status(400).json({ error: 'Os campos senha e confirmação são obrigatórios.' });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
+      }
+
+      if (password !== passwordConfirm) {
+        return res.status(400).json({ error: 'As senhas não coincidem.' });
+      }
+
+      const result = await calculosService.alterarSenhaPrimeiroAcesso(
+        req.pb!,
+        id,
+        password,
+        passwordConfirm
+      );
+
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
+      console.error('❌ Erro ao alterar senha de primeiro acesso:', error?.message, error?.response?.data);
+      res.status(500).json({ error: error.message || 'Erro ao alterar senha' });
     }
   };
 
@@ -321,6 +387,31 @@ export class CalculosController {
         console.error('Detalhes do erro do PocketBase:', JSON.stringify(error.response.data, null, 2));
       }
       res.status(500).json({ error: error.message || 'Erro interno ao gerar PDF' });
+    }
+  };
+
+  enviarEmailProposta = async (req: Request, res: Response) => {
+    try {
+      const { email, clientName, budgetTitle, pdfUrl } = req.body;
+
+      if (!email || typeof email !== 'string' || !email.trim()) {
+        return res.status(400).json({ error: 'Informe um e-mail de destino válido.' });
+      }
+
+      const success = await EmailService.enviarOrcamentoCliente({
+        toEmail: email.trim(),
+        clientName: clientName || 'Cliente',
+        budgetTitle: budgetTitle || 'Proposta de Energia Solar',
+        pdfUrl,
+      });
+
+      if (!success) {
+        return res.status(500).json({ error: 'Não foi possível enviar o e-mail. Verifique se a chave do Resend está configurada.' });
+      }
+
+      return res.json({ success: true, message: 'Proposta enviada com sucesso por e-mail!' });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message || 'Erro ao enviar e-mail da proposta.' });
     }
   };
 }
