@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
 import calculosService from '../services/calculos.service';
 import { PdfService } from '../services/pdf.service';
 import { EmailService } from '../services/email.service';
+import pb, { authenticatePB } from '../config/pocketbase';
 
 export class CalculosController {
   private pdfService = new PdfService();
@@ -392,10 +394,28 @@ export class CalculosController {
 
   enviarEmailProposta = async (req: Request, res: Response) => {
     try {
-      const { email, clientName, budgetTitle, pdfUrl } = req.body;
+      const { email, clientName, budgetTitle, pdfUrl, budgetId, pdfFilename } = req.body;
 
       if (!email || typeof email !== 'string' || !email.trim()) {
         return res.status(400).json({ error: 'Informe um e-mail de destino válido.' });
+      }
+
+      // Baixa o PDF direto do PocketBase interno (autenticado) para evitar 404 da URL pública
+      let pdfBuffer: Buffer | undefined;
+      if (budgetId && pdfFilename) {
+        try {
+          const pbBaseUrl = (process.env.POCKETBASE_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
+          const internalPdfUrl = `${pbBaseUrl}/api/files/orcamentos/${budgetId}/${pdfFilename}`;
+          // Usa o token do usuário autenticado na requisição atual
+          const pbToken = req.pb?.authStore?.token;
+          const headers: Record<string, string> = {};
+          if (pbToken) headers['Authorization'] = pbToken;
+          const response = await axios.get(internalPdfUrl, { responseType: 'arraybuffer', headers });
+          pdfBuffer = Buffer.from(response.data);
+        } catch (pdfErr: any) {
+          console.error('Aviso: não foi possível baixar o PDF para anexo:', pdfErr?.message);
+          // Continua sem o PDF anexado
+        }
       }
 
       const success = await EmailService.enviarOrcamentoCliente({
@@ -403,6 +423,7 @@ export class CalculosController {
         clientName: clientName || 'Cliente',
         budgetTitle: budgetTitle || 'Proposta de Energia Solar',
         pdfUrl,
+        pdfBuffer,
       });
 
       if (!success) {
@@ -412,6 +433,36 @@ export class CalculosController {
       return res.json({ success: true, message: 'Proposta enviada com sucesso por e-mail!' });
     } catch (error: any) {
       return res.status(500).json({ error: error.message || 'Erro ao enviar e-mail da proposta.' });
+    }
+  };
+
+  atualizarPerfilUsuario = async (req: Request, res: Response) => {
+    try {
+      const rawId = req.params.id;
+      const id = Array.isArray(rawId) ? rawId[0] : rawId;
+      const { name } = req.body;
+
+      if (req.user?.id !== id && req.user?.tipo_acesso !== 'admin') {
+        return res.status(403).json({ error: 'Acesso Proibido: você só pode atualizar seu próprio perfil.' });
+      }
+
+      const formData = new FormData();
+      if (name && typeof name === 'string' && name.trim()) {
+        formData.append('name', name.trim());
+      }
+
+      if (req.file) {
+        const fileBlob = new Blob([new Uint8Array(req.file.buffer)], { type: req.file.mimetype });
+        formData.append('avatar', fileBlob, req.file.originalname);
+      }
+
+      await authenticatePB();
+      const record = await pb.collection('users').update(id, formData);
+
+      return res.json({ success: true, record });
+    } catch (error: any) {
+      console.error('❌ Erro ao atualizar perfil do usuário:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao atualizar perfil do usuário.' });
     }
   };
 }
