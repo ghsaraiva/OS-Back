@@ -47,7 +47,9 @@ export class CalculosDataFetcher {
   }
 
   static async criarOrcamento(pbInstance: any, data: any): Promise<any> {
-    return pbInstance.collection('orcamentos').create(data);
+    return pbInstance.collection('orcamentos').create(data, {
+      expand: 'user_id',
+    });
   }
 
   static async atualizarOrcamento(pbInstance: any, id: string, data: any): Promise<any> {

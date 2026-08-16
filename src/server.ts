@@ -5,6 +5,12 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import routes from './routes';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 dotenv.config();
 
 const app = express();
@@ -13,8 +19,12 @@ const port = process.env.PORT || 3000;
 // Configuração para proxy reverso (Caddy, Nginx, etc)
 app.set('trust proxy', 1);
 
-// 1. Blindagem de cabeçalhos HTTP com Helmet
-app.use(helmet());
+// 1. Blindagem de cabeçalhos HTTP com Helmet (permitindo cross-origin para imagens de e-mail)
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 
 // 2. Limitador de requisições por IP (Anti-DDoS / Brute Force)
 const limiter = rateLimit({
@@ -46,6 +56,12 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Servir imagens públicas para e-mails (logo, etc)
+app.use('/api/images', express.static(path.join(process.cwd(), 'src/assets')));
+app.use('/images', express.static(path.join(process.cwd(), 'src/assets')));
+app.use('/api/images', express.static(path.join(process.cwd(), 'dist')));
+app.use('/images', express.static(path.join(process.cwd(), 'dist')));
 
 // Routes
 app.use('/api', routes);

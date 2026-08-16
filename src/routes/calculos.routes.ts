@@ -1,8 +1,10 @@
 import { Router } from 'express';
+import multer from 'multer';
 import calculosController from '../controllers/calculos.controller';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth.middleware';
 
 const router = Router();
+const upload = multer({ limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Aplica o middleware de autenticação obrigatoriamente em todas as rotas
 router.use(authenticateToken);
@@ -36,6 +38,7 @@ router.get('/users', authorizeRoles(['admin']), calculosController.listarUsuario
 router.post('/users', authorizeRoles(['admin']), calculosController.criarUsuario);
 // Troca de senha de primeiro acesso (qualquer usuário autenticado, para si mesmo)
 router.patch('/users/:id/alterar-senha', calculosController.alterarSenhaPrimeiroAcesso);
+router.patch('/users/:id/perfil', upload.single('avatar'), calculosController.atualizarPerfilUsuario);
 router.get('/budgets', calculosController.listarOrcamentos);
 router.get('/budgets/:id', calculosController.obterOrcamento);
 router.patch('/budgets/:id/preco-venda', calculosController.atualizarPrecoVenda);
