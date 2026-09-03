@@ -68,6 +68,10 @@ export class CalculosService {
 
     const payload = {
       ...input,
+      porcentagem_seguro: input.porcentagem_seguro !== undefined ? input.porcentagem_seguro : 1,
+      porcentagem_imposto: input.porcentagem_imposto !== undefined ? input.porcentagem_imposto : 8,
+      km: input.km !== undefined ? input.km : 0,
+      custo_km: input.custo_km !== undefined ? input.custo_km : 0,
       kwp_minimo,
       situacao: 'Aberto'
     };
@@ -112,6 +116,10 @@ export class CalculosService {
       valorHomologacao: valorHomologacaoCalculado,
       porcentagemLucroLiquido: input.porcentagemLucroLiquido,
       quantidade_paineis: input.quantidade_paineis,
+      km: input.km,
+      custo_km: input.custo_km,
+      porcentagem_imposto: input.porcentagem_imposto,
+      porcentagem_seguro: input.porcentagem_seguro,
     });
 
     const retorno = CalculosProcess.calcularGeracaoERetorno({
@@ -157,6 +165,14 @@ export class CalculosService {
       mao_obra: input.valorMaoDeObra,
       equipamento_local: input.valorEquipamentoLocal,
       valor_homologacao: valorHomologacaoCalculado,
+      km: input.km !== undefined ? input.km : 0,
+      custo_km: input.custo_km !== undefined ? input.custo_km : 0,
+      porcentagem_imposto: input.porcentagem_imposto !== undefined
+        ? input.porcentagem_imposto
+        : (orcamentoOriginal.porcentagem_imposto !== undefined ? orcamentoOriginal.porcentagem_imposto : 8),
+      porcentagem_seguro: input.porcentagem_seguro !== undefined
+        ? input.porcentagem_seguro
+        : (orcamentoOriginal.porcentagem_seguro !== undefined ? orcamentoOriginal.porcentagem_seguro : 1),
       chpzdpth: formComercial.composicao_resumo,
       observacao: input.observacao || orcamentoOriginal.observacao,
 
@@ -231,15 +247,28 @@ export class CalculosService {
   async atualizarPrecoVenda(pbInstance: any, id: string, preco_final_venda: number): Promise<any> {
     const orcamento = await CalculosDataFetcher.obterOrcamentoPorId(pbInstance, id);
 
-    const seguro = formatarMoeda(preco_final_venda * TAXA_SEGURO);
     const kitLicenciado = orcamento.valor_kit_final || 0;
-    const imposto = formatarMoeda(Math.max(preco_final_venda - kitLicenciado, 0) * TAXA_IMPOSTO);
+    const taxaSeguro = (orcamento.porcentagem_seguro !== undefined && orcamento.porcentagem_seguro !== null)
+      ? (orcamento.porcentagem_seguro / 100)
+      : (orcamento.seguro && orcamento.preco_final_venda ? Number((orcamento.seguro / orcamento.preco_final_venda).toFixed(4)) : TAXA_SEGURO);
+
+    const taxaImposto = (orcamento.porcentagem_imposto !== undefined && orcamento.porcentagem_imposto !== null)
+      ? (orcamento.porcentagem_imposto / 100)
+      : (orcamento.imposto && orcamento.preco_final_venda && (orcamento.preco_final_venda - kitLicenciado > 0)
+          ? Number((orcamento.imposto / (orcamento.preco_final_venda - kitLicenciado)).toFixed(4))
+          : TAXA_IMPOSTO);
+
+    const seguro = formatarMoeda(preco_final_venda * taxaSeguro);
+    const custoKmTotal = (orcamento.km || 0) * (orcamento.custo_km || 0);
+
+    const imposto = formatarMoeda(Math.max(preco_final_venda - kitLicenciado, 0) * taxaImposto);
     const margemSeguranca = orcamento.margem_seguranca || 0;
     const custoDireto =
       (orcamento.valor_kit_final || 0) +
       (orcamento.valor_mao_obra_final || 0) +
       (orcamento.valor_equip_local_final || 0) +
-      (orcamento.valor_homologacao || 0);
+      (orcamento.valor_homologacao || 0) +
+      custoKmTotal;
     const custoProjeto = formatarMoeda(custoDireto + margemSeguranca + seguro + imposto);
     const lucroLiquidoPrevisto = formatarMoeda(preco_final_venda - custoProjeto);
     const lucroLiquidoPerc = formatarMoeda(preco_final_venda > 0 ? (lucroLiquidoPrevisto / preco_final_venda) * 100 : 0);

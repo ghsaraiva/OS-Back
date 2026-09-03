@@ -63,7 +63,7 @@ export class CalculosProcess {
     const economia_anual_rs = formatarMoeda(economia_mensal_rs * 12);
     const porcentagem_reducao = Number((economia_mensal_rs / (consumo_mes_rs || 1)).toFixed(2));
 
-    let tempo_retorno = "N/A";
+    let tempo_retorno = "Sem Retorno (Geração Excedente)";
     if (economia_mensal_rs > 0 && valor_investido > 0) {
       const mesesTotal = valor_investido / economia_mensal_rs;
       let anos = Math.floor(mesesTotal / 12);
@@ -117,28 +117,47 @@ export class CalculosProcess {
       quantidade_inversores,
       potencia_inversor,
       porcentagemLucroLiquido,
-      quantidade_paineis
+      quantidade_paineis,
+      km,
+      custo_km,
+      porcentagem_imposto,
+      porcentagem_seguro
     } = input;
 
-    if (porcentagemLucroLiquido > MAX_LUCRO_LIQUIDO_PERMITIDO) {
-      throw new Error(`A porcentagem de lucro líquido desejada excede o limite máximo permitido de ${MAX_LUCRO_LIQUIDO_PERMITIDO}%.`);
+    const taxaImposto = (porcentagem_imposto !== undefined && porcentagem_imposto !== null && !isNaN(porcentagem_imposto) && porcentagem_imposto >= 0)
+      ? (porcentagem_imposto / 100)
+      : TAXA_IMPOSTO;
+
+    const taxaSeguro = (porcentagem_seguro !== undefined && porcentagem_seguro !== null && !isNaN(porcentagem_seguro) && porcentagem_seguro >= 0)
+      ? (porcentagem_seguro / 100)
+      : TAXA_SEGURO;
+
+    const maxLucroPermitido = Number(((1 - taxaSeguro - taxaImposto) * 100 - 0.5).toFixed(2));
+    if (porcentagemLucroLiquido > maxLucroPermitido) {
+      throw new Error(`A porcentagem de lucro líquido desejada excede o limite máximo permitido de ${maxLucroPermitido}%.`);
     }
 
     const valorMaoDeObraTotal = valorMaoDeObra * (quantidade_paineis || 0);
     const valorEquipamentoLocalTotal = valorEquipamentoLocal * (quantidade_paineis || 0);
+    const custoKmTotal = (km || 0) * (custo_km || 0);
 
     const valorHomologacaoReal = (quantidade_inversores !== undefined && potencia_inversor !== undefined && quantidade_inversores > 0)
       ? CalculosProcess.calcularValorHomologacao(quantidade_inversores, potencia_inversor)
       : (valorHomologacao || 500);
 
-    const custoDireto = valorKitLicenciado + valorMaoDeObraTotal + valorEquipamentoLocalTotal + valorHomologacaoReal;
+    const custoDireto = valorKitLicenciado + valorMaoDeObraTotal + valorEquipamentoLocalTotal + valorHomologacaoReal + custoKmTotal;
     const margemSeguranca = (valorKitLicenciado / 0.97) - valorKitLicenciado;
-    const divisor = 1 - (porcentagemLucroLiquido / 100) - TAXA_SEGURO - TAXA_IMPOSTO;
-    const precoFinalSugerido = (custoDireto + margemSeguranca - (TAXA_IMPOSTO * valorKitLicenciado)) / divisor;
+    const divisor = 1 - (porcentagemLucroLiquido / 100) - taxaSeguro - taxaImposto;
 
-    const seguro = precoFinalSugerido * TAXA_SEGURO;
+    if (divisor <= 0) {
+      throw new Error("A soma da margem de lucro líquido, seguro e imposto não pode ser igual ou superior a 100%.");
+    }
+
+    const precoFinalSugerido = (custoDireto + margemSeguranca - (taxaImposto * valorKitLicenciado)) / divisor;
+
+    const seguro = precoFinalSugerido * taxaSeguro;
     const lucroLiquidoRs = precoFinalSugerido * (porcentagemLucroLiquido / 100);
-    const imposto = (precoFinalSugerido - valorKitLicenciado) * TAXA_IMPOSTO;
+    const imposto = (precoFinalSugerido - valorKitLicenciado) * taxaImposto;
     const custoProjeto = precoFinalSugerido - lucroLiquidoRs;
 
     return {
@@ -151,7 +170,10 @@ export class CalculosProcess {
       precoFinalSugerido: formatarMoeda(precoFinalSugerido),
       valorMaoDeObraTotal: formatarMoeda(valorMaoDeObraTotal),
       valorEquipamentoLocalTotal: formatarMoeda(valorEquipamentoLocalTotal),
-      valorHomologacaoCalculado: formatarMoeda(valorHomologacaoReal)
+      valorHomologacaoCalculado: formatarMoeda(valorHomologacaoReal),
+      custoKmTotal: formatarMoeda(custoKmTotal),
+      porcentagem_imposto: formatarMoeda(taxaImposto * 100),
+      porcentagem_seguro: formatarMoeda(taxaSeguro * 100)
     };
   }
 

@@ -3,8 +3,8 @@ import { formatarMoeda, TAXA_SEGURO, TAXA_IMPOSTO, MAX_LUCRO_LIQUIDO_PERMITIDO }
 
 describe('Calculos Utils', () => {
   it('deve ter as constantes corretas configuradas', () => {
-    expect(TAXA_SEGURO).toBe(0.015);
-    expect(TAXA_IMPOSTO).toBe(0.15);
+    expect(TAXA_SEGURO).toBe(0.01);
+    expect(TAXA_IMPOSTO).toBe(0.08);
     expect(MAX_LUCRO_LIQUIDO_PERMITIDO).toBe(83.0);
   });
 
