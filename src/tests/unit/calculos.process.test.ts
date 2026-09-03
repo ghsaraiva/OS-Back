@@ -96,7 +96,66 @@ describe('Calculos Process (Business Logic)', () => {
         result.lucroLiquidoRs;
 
       expect(somaProvaReal).toBeCloseTo(result.precoFinalSugerido, 1);
-      expect(result.precoFinalSugerido).toBe(19255.78);
+      expect(result.precoFinalSugerido).toBe(18368.69);
+    });
+
+    it('deve calcular corretamente com alíquota de seguro customizada (ex: 2.5%)', () => {
+      const input = {
+        valorKitLicenciado: 10000,
+        valorMaoDeObra: 1000,
+        valorEquipamentoLocal: 500,
+        valorHomologacao: 500,
+        porcentagemLucroLiquido: 20,
+        quantidade_paineis: 1,
+        porcentagem_seguro: 2.5,
+        porcentagem_imposto: 8
+      };
+
+      const result = CalculosProcess.calcularPrecoFinal(input);
+      expect(result.porcentagem_seguro).toBe(2.5);
+      expect(result.seguro).toBeCloseTo(result.precoFinalSugerido * 0.025, 1);
+    });
+
+    it('deve calcular corretamente o preço com KM e custo_km informados', () => {
+      const input = {
+        valorKitLicenciado: 11000,
+        valorMaoDeObra: 2000,
+        valorEquipamentoLocal: 500,
+        valorHomologacao: 1000,
+        porcentagemLucroLiquido: 15,
+        quantidade_paineis: 1,
+        km: 100,
+        custo_km: 2.5
+      };
+
+      const result = CalculosProcess.calcularPrecoFinal(input);
+      expect(result.custoKmTotal).toBe(250);
+      expect(result.custoDireto).toBe(11000 + 2000 + 500 + 1000 + 250);
+
+      const somaProvaReal = 
+        result.custoDireto + 
+        result.margemSeguranca + 
+        result.seguro + 
+        result.imposto + 
+        result.lucroLiquidoRs;
+
+      expect(somaProvaReal).toBeCloseTo(result.precoFinalSugerido, 1);
+    });
+
+    it('deve calcular corretamente com alíquota de imposto customizada (ex: 10%)', () => {
+      const input = {
+        valorKitLicenciado: 10000,
+        valorMaoDeObra: 1000,
+        valorEquipamentoLocal: 500,
+        valorHomologacao: 500,
+        porcentagemLucroLiquido: 20,
+        quantidade_paineis: 1,
+        porcentagem_imposto: 10
+      };
+
+      const result = CalculosProcess.calcularPrecoFinal(input);
+      expect(result.porcentagem_imposto).toBe(10);
+      expect(result.imposto).toBeCloseTo((result.precoFinalSugerido - 10000) * 0.10, 1);
     });
 
     it('deve lançar erro se a porcentagem de lucro líquido desejada for maior que o limite permitido', () => {
@@ -106,7 +165,7 @@ describe('Calculos Process (Business Logic)', () => {
           valorMaoDeObra: 100,
           valorEquipamentoLocal: 50,
           valorHomologacao: 1000,
-          porcentagemLucroLiquido: 85,
+          porcentagemLucroLiquido: 92,
           quantidade_paineis: 10
         });
       }).toThrow('excede o limite máximo permitido');

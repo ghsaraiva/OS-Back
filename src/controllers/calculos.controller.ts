@@ -110,11 +110,15 @@ export class CalculosController {
         valorMaoDeObra, 
         valorEquipamentoLocal, 
         valorHomologacao, 
-        porcentagemLucroLiquido,
+        porcentagemLucroLiquido, 
         quantidade_paineis,
 
         quantidade_inversores,
-        potencia_inversor
+        potencia_inversor,
+        km,
+        custo_km,
+        porcentagem_imposto,
+        porcentagem_seguro
       } = req.body;
 
       if (
@@ -137,7 +141,11 @@ export class CalculosController {
         quantidade_paineis,
 
         quantidade_inversores,
-        potencia_inversor
+        potencia_inversor,
+        km: km !== undefined ? Number(km) : undefined,
+        custo_km: custo_km !== undefined ? Number(custo_km) : undefined,
+        porcentagem_imposto: porcentagem_imposto !== undefined ? Number(porcentagem_imposto) : undefined,
+        porcentagem_seguro: porcentagem_seguro !== undefined ? Number(porcentagem_seguro) : undefined
       });
 
       return res.json(result);

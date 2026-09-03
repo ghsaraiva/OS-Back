@@ -78,6 +78,10 @@ export interface PrecoFinalInput {
   potencia_inversor?: number;
   porcentagemLucroLiquido: number;
   quantidade_paineis: number;
+  km?: number;
+  custo_km?: number;
+  porcentagem_imposto?: number;
+  porcentagem_seguro?: number;
 }
 
 export interface PrecoFinalOutput {
@@ -91,6 +95,9 @@ export interface PrecoFinalOutput {
   valorEquipamentoLocalTotal: number;
   custoDireto: number; // Novo campo para o custo bruto sem impostos/margem
   valorHomologacaoCalculado: number;
+  custoKmTotal: number;
+  porcentagem_imposto: number;
+  porcentagem_seguro: number;
 }
 
 export interface CriarSolicitacaoInput {
@@ -106,6 +113,10 @@ export interface CriarSolicitacaoInput {
   estrutura: string;
   padrao: string;
   observacao?: string;
+  km?: number;
+  custo_km?: number;
+  porcentagem_imposto?: number;
+  porcentagem_seguro?: number;
 }
 
 export interface SalvarRefinamentoInput {
@@ -135,6 +146,10 @@ export interface SalvarRefinamentoInput {
   valorEquipamentoLocal: number;
   valorHomologacao: number;
   porcentagemLucroLiquido: number;
+  km?: number;
+  custo_km?: number;
+  porcentagem_imposto?: number;
+  porcentagem_seguro?: number;
   observacao?: string;
 
   // Novos campos de Sistema e Geração (Mantemos apenas os inputs)

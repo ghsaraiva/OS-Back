@@ -81,11 +81,11 @@ describe('CalculosService Orquestrador (Unit)', () => {
 
       expect(CalculosDataFetcher.atualizarOrcamento).toHaveBeenCalledWith(expect.anything(), 'orc123', expect.objectContaining({
         preco_final_venda: 20000,
-        seguro: 300,
-        imposto: 1350,
-        custo_projeto: 16727.67,
-        lucro_liquido_previsto: 3272.33,
-        lucro_liquido_perc: 16.36
+        seguro: 200,
+        imposto: 720,
+        custo_projeto: 15997.67,
+        lucro_liquido_previsto: 4002.33,
+        lucro_liquido_perc: 20.01
       }));
       expect(result.preco_final_venda).toBe(20000);
     });
