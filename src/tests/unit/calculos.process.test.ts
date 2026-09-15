@@ -142,6 +142,31 @@ describe('Calculos Process (Business Logic)', () => {
       expect(somaProvaReal).toBeCloseTo(result.precoFinalSugerido, 1);
     });
 
+    it('deve aumentar exatamente o custo do KM no preço final sem incidir margem de lucro, seguro ou imposto sobre o KM', () => {
+      const baseInput = {
+        valorKitLicenciado: 10000,
+        valorMaoDeObra: 1000,
+        valorEquipamentoLocal: 500,
+        valorHomologacao: 500,
+        porcentagemLucroLiquido: 20,
+        quantidade_paineis: 1,
+      };
+
+      const semKm = CalculosProcess.calcularPrecoFinal(baseInput);
+      const comKm = CalculosProcess.calcularPrecoFinal({
+        ...baseInput,
+        km: 400,
+        custo_km: 2.0
+      });
+
+      expect(comKm.custoKmTotal).toBe(800);
+      expect(comKm.precoFinalSugerido).toBeCloseTo(semKm.precoFinalSugerido + 800, 2);
+      expect(comKm.lucroLiquidoRs).toBeCloseTo(semKm.lucroLiquidoRs, 2);
+      expect(comKm.seguro).toBeCloseTo(semKm.seguro, 2);
+      expect(comKm.imposto).toBeCloseTo(semKm.imposto, 2);
+      expect(comKm.margemSeguranca).toBeCloseTo(semKm.margemSeguranca, 2);
+    });
+
     it('deve calcular corretamente com alíquota de imposto customizada (ex: 10%)', () => {
       const input = {
         valorKitLicenciado: 10000,

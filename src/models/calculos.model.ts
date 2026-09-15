@@ -115,6 +115,7 @@ export interface CriarSolicitacaoInput {
   observacao?: string;
   km?: number;
   custo_km?: number;
+  valor_total_km?: number;
   porcentagem_imposto?: number;
   porcentagem_seguro?: number;
 }
@@ -148,6 +149,7 @@ export interface SalvarRefinamentoInput {
   porcentagemLucroLiquido: number;
   km?: number;
   custo_km?: number;
+  valor_total_km?: number;
   porcentagem_imposto?: number;
   porcentagem_seguro?: number;
   observacao?: string;

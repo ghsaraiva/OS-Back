@@ -145,7 +145,7 @@ export class CalculosProcess {
       ? CalculosProcess.calcularValorHomologacao(quantidade_inversores, potencia_inversor)
       : (valorHomologacao || 500);
 
-    const custoDireto = valorKitLicenciado + valorMaoDeObraTotal + valorEquipamentoLocalTotal + valorHomologacaoReal + custoKmTotal;
+    const custoDiretoSemKm = valorKitLicenciado + valorMaoDeObraTotal + valorEquipamentoLocalTotal + valorHomologacaoReal;
     const margemSeguranca = (valorKitLicenciado / 0.97) - valorKitLicenciado;
     const divisor = 1 - (porcentagemLucroLiquido / 100) - taxaSeguro - taxaImposto;
 
@@ -153,12 +153,17 @@ export class CalculosProcess {
       throw new Error("A soma da margem de lucro líquido, seguro e imposto não pode ser igual ou superior a 100%.");
     }
 
-    const precoFinalSugerido = (custoDireto + margemSeguranca - (taxaImposto * valorKitLicenciado)) / divisor;
+    // Preço base do sistema (sobre o qual incidem margem de lucro, seguro e imposto)
+    const precoBaseSistema = (custoDiretoSemKm + margemSeguranca - (taxaImposto * valorKitLicenciado)) / divisor;
 
-    const seguro = precoFinalSugerido * taxaSeguro;
-    const lucroLiquidoRs = precoFinalSugerido * (porcentagemLucroLiquido / 100);
-    const imposto = (precoFinalSugerido - valorKitLicenciado) * taxaImposto;
+    const seguro = precoBaseSistema * taxaSeguro;
+    const lucroLiquidoRs = precoBaseSistema * (porcentagemLucroLiquido / 100);
+    const imposto = (precoBaseSistema - valorKitLicenciado) * taxaImposto;
+
+    // KM é um adicional puro ao preço final (não incide margem de lucro, seguro nem imposto)
+    const precoFinalSugerido = precoBaseSistema + custoKmTotal;
     const custoProjeto = precoFinalSugerido - lucroLiquidoRs;
+    const custoDireto = custoDiretoSemKm + custoKmTotal;
 
     return {
       custoDireto: formatarMoeda(custoDireto),

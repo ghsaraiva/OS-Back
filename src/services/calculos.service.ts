@@ -72,6 +72,7 @@ export class CalculosService {
       porcentagem_imposto: input.porcentagem_imposto !== undefined ? input.porcentagem_imposto : 8,
       km: input.km !== undefined ? input.km : 0,
       custo_km: input.custo_km !== undefined ? input.custo_km : 0,
+      valor_total_km: input.valor_total_km !== undefined ? input.valor_total_km : ((input.km || 0) * (input.custo_km || 0)),
       kwp_minimo,
       situacao: 'Aberto'
     };
@@ -167,6 +168,7 @@ export class CalculosService {
       valor_homologacao: valorHomologacaoCalculado,
       km: input.km !== undefined ? input.km : 0,
       custo_km: input.custo_km !== undefined ? input.custo_km : 0,
+      valor_total_km: input.valor_total_km !== undefined ? input.valor_total_km : (cascata.custoKmTotal || 0),
       porcentagem_imposto: input.porcentagem_imposto !== undefined
         ? input.porcentagem_imposto
         : (orcamentoOriginal.porcentagem_imposto !== undefined ? orcamentoOriginal.porcentagem_imposto : 8),
@@ -258,10 +260,11 @@ export class CalculosService {
           ? Number((orcamento.imposto / (orcamento.preco_final_venda - kitLicenciado)).toFixed(4))
           : TAXA_IMPOSTO);
 
-    const seguro = formatarMoeda(preco_final_venda * taxaSeguro);
     const custoKmTotal = (orcamento.km || 0) * (orcamento.custo_km || 0);
+    const precoBaseSistema = Math.max(preco_final_venda - custoKmTotal, 0);
 
-    const imposto = formatarMoeda(Math.max(preco_final_venda - kitLicenciado, 0) * taxaImposto);
+    const seguro = formatarMoeda(precoBaseSistema * taxaSeguro);
+    const imposto = formatarMoeda(Math.max(precoBaseSistema - kitLicenciado, 0) * taxaImposto);
     const margemSeguranca = orcamento.margem_seguranca || 0;
     const custoDireto =
       (orcamento.valor_kit_final || 0) +
@@ -271,7 +274,7 @@ export class CalculosService {
       custoKmTotal;
     const custoProjeto = formatarMoeda(custoDireto + margemSeguranca + seguro + imposto);
     const lucroLiquidoPrevisto = formatarMoeda(preco_final_venda - custoProjeto);
-    const lucroLiquidoPerc = formatarMoeda(preco_final_venda > 0 ? (lucroLiquidoPrevisto / preco_final_venda) * 100 : 0);
+    const lucroLiquidoPerc = formatarMoeda(precoBaseSistema > 0 ? (lucroLiquidoPrevisto / precoBaseSistema) * 100 : 0);
 
     const updateData = {
       preco_final_venda,
