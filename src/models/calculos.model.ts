@@ -120,6 +120,7 @@ export interface CriarSolicitacaoInput {
   lucro_liquido_perc?: number;
   km?: number;
   custo_km?: number;
+  valor_total_km?: number;
   porcentagem_imposto?: number;
   porcentagem_seguro?: number;
   porcentagem_margem_seguranca?: number;
@@ -154,6 +155,7 @@ export interface SalvarRefinamentoInput {
   porcentagemLucroLiquido: number;
   km?: number;
   custo_km?: number;
+  valor_total_km?: number;
   porcentagem_imposto?: number;
   porcentagem_seguro?: number;
   porcentagem_margem_seguranca?: number;
