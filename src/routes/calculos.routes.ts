@@ -48,6 +48,11 @@ router.patch('/budgets/:id', calculosController.atualizarOrcamento);
 router.post('/gerar-pdf/:id', calculosController.gerarPdf);
 router.post('/enviar-email-proposta', calculosController.enviarEmailProposta);
 
+// Notificações do admin (sino do cabeçalho)
+router.get('/notificacoes', authorizeRoles(['admin']), calculosController.listarNotificacoes);
+router.patch('/notificacoes/lidas', authorizeRoles(['admin']), calculosController.marcarTodasNotificacoesLidas);
+router.patch('/notificacoes/:id/lida', authorizeRoles(['admin']), calculosController.marcarNotificacaoLida);
+
 // Listagem de Cidades com HSP
 router.get('/cidades', calculosController.listarCidades);
 router.get('/cidades/:id', calculosController.obterCidade);

@@ -21,6 +21,15 @@ export interface OrcamentoClienteEmailData {
   pdfBuffer?: Buffer; // Buffer do PDF já baixado pelo controller (evita 404 da URL pública)
 }
 
+export interface NovoOrcamentoAdminEmailData {
+  toEmails: string[];
+  autorNome: string;
+  tipoAcesso: string;
+  clienteNome: string;
+  cidade: string;
+  orcamentoId: string;
+}
+
 export class EmailService {
   private static getSystemFromEmail(): string {
     return (
@@ -390,6 +399,86 @@ export class EmailService {
     } catch (error: any) {
       console.error(
         "Erro ao enviar e-mail via Resend:",
+        error.response?.data || error.message,
+      );
+      return false;
+    }
+  }
+
+  /** Avisa os admins que um vendedor/associado cadastrou um orçamento para refinar. */
+  static async enviarNovoOrcamentoAdmin(
+    data: NovoOrcamentoAdminEmailData,
+  ): Promise<boolean> {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey || data.toEmails.length === 0) return false;
+
+    const fromEmail = this.getSystemFromEmail();
+    const currentYear = new Date().getFullYear();
+    const logoHeader = this.getLogoHeader(200);
+    const logoAttachment = this.getLogoAttachment();
+    const frontendUrl = (
+      process.env.FRONTEND_URL || "http://localhost:5173"
+    ).replace(/\/$/, "");
+    const link = `${frontendUrl}/orcamentos/gerenciamento?id=${data.orcamentoId}`;
+    const escapar = (t: string) =>
+      t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; }
+          .wrapper { max-width: 520px; margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,0.08); border-radius: 12px; overflow: hidden; }
+          .card { background-color: #ffffff; padding: 28px 32px 32px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px; }
+          .title { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 16px; color: #0f172a; }
+          .text { font-size: 14px; color: #475569; line-height: 1.6; margin-bottom: 20px; }
+          .btn-container { text-align: center; margin-top: 24px; margin-bottom: 24px; }
+          .btn { background-color: #fcde09; color: #000000 !important; font-weight: 600; text-decoration: none; padding: 12px 28px; border-radius: 8px; display: inline-block; font-size: 14px; }
+          .footer { font-size: 12px; color: #94a3b8; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 16px; margin-top: 24px; }
+          ${this.getDarkModeStyles()}
+        </style>
+      </head>
+      <body>
+        <div class="wrapper">
+          ${logoHeader}
+          <div class="card">
+            <div class="title">Novo orçamento para refinar</div>
+            <div class="text">
+              <strong>${escapar(data.autorNome)}</strong> (${escapar(data.tipoAcesso)}) cadastrou um orçamento para
+              <strong>${escapar(data.clienteNome)}</strong>${data.cidade ? ` em ${escapar(data.cidade)}` : ""}.
+              Ele está aguardando a precificação do kit no Gerenciamento.
+            </div>
+            <div class="btn-container"><a href="${link}" target="_blank" class="btn">Abrir no Gerenciamento</a></div>
+            <div class="footer">&copy; ${currentYear} Sofia Engenharia Elétrica. Todos os direitos reservados.</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    try {
+      await axios.post(
+        "https://api.resend.com/emails",
+        {
+          from: fromEmail,
+          to: data.toEmails,
+          subject: `Novo orçamento de ${data.autorNome}: ${data.clienteNome}`,
+          html: htmlContent,
+          attachments: logoAttachment ? [logoAttachment] : [],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+      return true;
+    } catch (error: any) {
+      console.error(
+        "Erro ao enviar e-mail de novo orçamento:",
         error.response?.data || error.message,
       );
       return false;

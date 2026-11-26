@@ -3,6 +3,7 @@ import axios from 'axios';
 import calculosService from '../services/calculos.service';
 import { PdfService } from '../services/pdf.service';
 import { EmailService } from '../services/email.service';
+import { NotificacaoService } from '../services/notificacao.service';
 import pb, { authenticatePB } from '../config/pocketbase';
 
 // Campos que o usuário pode mandar ao criar uma solicitação; kit, preço e resultados de cálculo nunca vêm do cliente.
@@ -74,7 +75,16 @@ export class CalculosController {
         input.porcentagem_margem_seguranca = margem;
       }
 
-      const result = await calculosService.criarSolicitacaoInicial(await this.pbServidor(), { ...input, user_id } as any);
+      const pbServidor = await this.pbServidor();
+      const result = await calculosService.criarSolicitacaoInicial(pbServidor, { ...input, user_id } as any);
+
+      // Avisa os admins (sino + e-mail) sem atrasar nem derrubar a criação do orçamento
+      if (req.user?.tipo_acesso !== 'admin') {
+        NotificacaoService.notificarNovoOrcamento(pbServidor, result, req.user as any).catch((erro) =>
+          console.error('Erro ao notificar novo orçamento:', erro?.response?.data || erro?.message || erro),
+        );
+      }
+
       return res.status(201).json(calculosService.sanitizarOrcamento(result, req.user?.tipo_acesso));
     } catch (error: any) {
       next(error);
@@ -710,6 +720,33 @@ export class CalculosController {
     } catch (error: any) {
       console.error('❌ Erro ao atualizar perfil do usuário:', error);
       return res.status(500).json({ error: error.message || 'Erro ao atualizar perfil do usuário.' });
+    }
+  };
+
+  listarNotificacoes = async (req: Request, res: Response) => {
+    try {
+      return res.json(await NotificacaoService.listar(await this.pbServidor(), req.user!.id));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao listar notificações' });
+    }
+  };
+
+  marcarNotificacaoLida = async (req: Request, res: Response) => {
+    try {
+      const ok = await NotificacaoService.marcarLida(await this.pbServidor(), req.user!.id, req.params.id as string);
+      if (!ok) return res.status(404).json({ error: 'Notificação não encontrada.' });
+      return res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao marcar notificação' });
+    }
+  };
+
+  marcarTodasNotificacoesLidas = async (req: Request, res: Response) => {
+    try {
+      const total = await NotificacaoService.marcarTodasLidas(await this.pbServidor(), req.user!.id);
+      return res.json({ success: true, total });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || 'Erro ao marcar notificações' });
     }
   };
 }
