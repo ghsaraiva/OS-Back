@@ -82,6 +82,7 @@ export interface PrecoFinalInput {
   custo_km?: number;
   porcentagem_imposto?: number;
   porcentagem_seguro?: number;
+  porcentagem_margem_seguranca?: number;
 }
 
 export interface PrecoFinalOutput {
@@ -98,6 +99,7 @@ export interface PrecoFinalOutput {
   custoKmTotal: number;
   porcentagem_imposto: number;
   porcentagem_seguro: number;
+  porcentagem_margem_seguranca: number;
 }
 
 export interface CriarSolicitacaoInput {
@@ -113,11 +115,15 @@ export interface CriarSolicitacaoInput {
   estrutura: string;
   padrao: string;
   observacao?: string;
+  mao_obra?: number;
+  equipamento_local?: number;
+  lucro_liquido_perc?: number;
   km?: number;
   custo_km?: number;
   valor_total_km?: number;
   porcentagem_imposto?: number;
   porcentagem_seguro?: number;
+  porcentagem_margem_seguranca?: number;
 }
 
 export interface SalvarRefinamentoInput {
@@ -152,6 +158,7 @@ export interface SalvarRefinamentoInput {
   valor_total_km?: number;
   porcentagem_imposto?: number;
   porcentagem_seguro?: number;
+  porcentagem_margem_seguranca?: number;
   observacao?: string;
 
   // Novos campos de Sistema e Geração (Mantemos apenas os inputs)
@@ -184,4 +191,15 @@ export interface ConfigMargensLucroOutput {
   opcoes: { value: string; label: string }[];
   min: number;
   max: number;
+}
+
+export interface CustosAssociadoInput {
+  mao_obra: number;
+  equipamento_local: number;
+  km: number;
+  custo_km: number;
+  porcentagem_imposto: number;
+  porcentagem_seguro: number;
+  porcentagem_margem_seguranca?: number;
+  lucro_liquido_perc: number;
 }

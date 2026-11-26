@@ -42,6 +42,8 @@ router.patch('/users/:id/perfil', upload.single('avatar'), calculosController.at
 router.get('/budgets', calculosController.listarOrcamentos);
 router.get('/budgets/:id', calculosController.obterOrcamento);
 router.patch('/budgets/:id/preco-venda', calculosController.atualizarPrecoVenda);
+router.patch('/budgets/:id/custos', authorizeRoles(['associado']), calculosController.atualizarCustosAssociado);
+router.patch('/budgets/:id/solicitacao', authorizeRoles(['associado']), calculosController.atualizarSolicitacaoAssociado);
 router.patch('/budgets/:id', calculosController.atualizarOrcamento);
 router.post('/gerar-pdf/:id', calculosController.gerarPdf);
 router.post('/enviar-email-proposta', calculosController.enviarEmailProposta);

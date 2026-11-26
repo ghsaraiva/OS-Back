@@ -96,7 +96,7 @@ describe('Calculos Process (Business Logic)', () => {
         result.lucroLiquidoRs;
 
       expect(somaProvaReal).toBeCloseTo(result.precoFinalSugerido, 1);
-      expect(result.precoFinalSugerido).toBe(18368.69);
+      expect(result.precoFinalSugerido).toBe(18511.12); // margem de 3% sobre o custo direto: 448,45
     });
 
     it('deve calcular corretamente com alíquota de seguro customizada (ex: 2.5%)', () => {
@@ -114,6 +114,60 @@ describe('Calculos Process (Business Logic)', () => {
       const result = CalculosProcess.calcularPrecoFinal(input);
       expect(result.porcentagem_seguro).toBe(2.5);
       expect(result.seguro).toBeCloseTo(result.precoFinalSugerido * 0.025, 1);
+    });
+
+    it('margem de segurança padrão é 3% "por dentro" sobre o custo direto sem km', () => {
+      const base = {
+        valorKitLicenciado: 13440,
+        valorMaoDeObra: 100,
+        valorEquipamentoLocal: 60,
+        valorHomologacao: 500,
+        porcentagemLucroLiquido: 20,
+        quantidade_paineis: 10,
+      };
+
+      const padrao = CalculosProcess.calcularPrecoFinal(base);
+      // (13.440 + 1.000 + 600 + 500) / 0,97 - 15.540; o km não entra na base
+      expect(padrao.margemSeguranca).toBe(480.62);
+      const comKm = CalculosProcess.calcularPrecoFinal({ ...base, km: 300, custo_km: 2 });
+      expect(comKm.margemSeguranca).toBe(480.62);
+      expect(padrao.porcentagem_margem_seguranca).toBe(3);
+
+      // Informar 3% explicitamente dá o mesmo resultado que o padrão
+      const tresPorCento = CalculosProcess.calcularPrecoFinal({ ...base, porcentagem_margem_seguranca: 3 });
+      expect(tresPorCento).toEqual(padrao);
+    });
+
+    it('deve calcular com margem de segurança customizada e com margem zero', () => {
+      const base = {
+        valorKitLicenciado: 10000,
+        valorMaoDeObra: 1000,
+        valorEquipamentoLocal: 500,
+        valorHomologacao: 500,
+        porcentagemLucroLiquido: 20,
+        quantidade_paineis: 1,
+      };
+
+      const cinco = CalculosProcess.calcularPrecoFinal({ ...base, porcentagem_margem_seguranca: 5 });
+      expect(cinco.margemSeguranca).toBe(631.58); // 12.000 / 0,95 - 12.000
+      expect(cinco.porcentagem_margem_seguranca).toBe(5);
+      expect(Number((cinco.custoProjeto + cinco.lucroLiquidoRs).toFixed(2))).toBe(cinco.precoFinalSugerido);
+
+      const zero = CalculosProcess.calcularPrecoFinal({ ...base, porcentagem_margem_seguranca: 0 });
+      expect(zero.margemSeguranca).toBe(0);
+      expect(zero.precoFinalSugerido).toBeLessThan(cinco.precoFinalSugerido);
+    });
+
+    it('deve recusar margem de segurança de 100% ou mais', () => {
+      expect(() => CalculosProcess.calcularPrecoFinal({
+        valorKitLicenciado: 10000,
+        valorMaoDeObra: 1000,
+        valorEquipamentoLocal: 500,
+        valorHomologacao: 500,
+        porcentagemLucroLiquido: 20,
+        quantidade_paineis: 1,
+        porcentagem_margem_seguranca: 100,
+      })).toThrow('margem de segurança');
     });
 
     it('deve calcular corretamente o preço com KM e custo_km informados', () => {
@@ -140,6 +194,32 @@ describe('Calculos Process (Business Logic)', () => {
         result.lucroLiquidoRs;
 
       expect(somaProvaReal).toBeCloseTo(result.precoFinalSugerido, 1);
+
+      // O km soma pelo valor de custo, sem seguro, imposto ou lucro
+      const semKm = CalculosProcess.calcularPrecoFinal({ ...input, km: 0, custo_km: 0 });
+      expect(result.precoFinalSugerido).toBeCloseTo(semKm.precoFinalSugerido + 250, 2);
+      expect(result.seguro).toBe(semKm.seguro);
+      expect(result.imposto).toBe(semKm.imposto);
+      expect(result.lucroLiquidoRs).toBe(semKm.lucroLiquidoRs);
+    });
+
+    it('as parcelas arredondadas devem somar exatamente o preço final, sem sobra de centavos', () => {
+      const result = CalculosProcess.calcularPrecoFinal({
+        valorKitLicenciado: 12960,
+        valorMaoDeObra: 80,
+        valorEquipamentoLocal: 50,
+        valorHomologacao: 500,
+        porcentagemLucroLiquido: 15,
+        quantidade_paineis: 15,
+        km: 200,
+        custo_km: 2,
+        porcentagem_imposto: 6,
+        porcentagem_seguro: 1,
+      });
+
+      const custoProjeto = result.custoDireto + result.margemSeguranca + result.seguro + result.imposto;
+      expect(Number(custoProjeto.toFixed(2))).toBe(result.custoProjeto);
+      expect(Number((result.custoProjeto + result.lucroLiquidoRs).toFixed(2))).toBe(result.precoFinalSugerido);
     });
 
     it('deve aumentar exatamente o custo do KM no preço final sem incidir margem de lucro, seguro ou imposto sobre o KM', () => {

@@ -2,11 +2,23 @@ import pb, { authenticatePB } from '../config/pocketbase';
 
 export class CalculosDataFetcher {
   static async obterCidadePorId(pbInstance: any, id: string): Promise<any> {
-    const record = await pbInstance.collection('cidades_hsp').getOne(id);
-    if (!record) {
-      throw new Error('Localidade não encontrada.');
+    try {
+      const record = await pbInstance.collection('cidades_hsp').getOne(id);
+      if (!record) {
+        throw new Error('Localidade não encontrada.');
+      }
+      return record;
+    } catch (err: any) {
+      if (err?.status === 403 || err?.status === 404) {
+        await authenticatePB();
+        const record = await pb.collection('cidades_hsp').getOne(id);
+        if (!record) {
+          throw new Error('Localidade não encontrada.');
+        }
+        return record;
+      }
+      throw err;
     }
-    return record;
   }
 
   static async obterCidadesHSP(pbInstance: any, search?: string): Promise<any> {
@@ -22,13 +34,12 @@ export class CalculosDataFetcher {
   }
 
   static async obterOrcamentoPorId(pbInstance: any, id: string): Promise<any> {
-    const record = await pbInstance.collection('orcamentos').getOne(id, {
-      expand: 'user_id'
-    });
-    if (!record) {
-      throw new Error('Orçamento não encontrado.');
+    try {
+      return await pbInstance.collection('orcamentos').getOne(id, { expand: 'user_id' });
+    } catch (err: any) {
+      if (err?.status === 404) return null;
+      throw err;
     }
-    return record;
   }
 
   static async listarOrcamentos(pbInstance: any, filter: string): Promise<any> {
@@ -46,10 +57,10 @@ export class CalculosDataFetcher {
     });
   }
 
+  // Quem chama decide a instância: o admin usa a própria sessão e os demais perfis passam pelo
+  // superusuário do backend depois das checagens de perfil e dono no controller.
   static async criarOrcamento(pbInstance: any, data: any): Promise<any> {
-    return pbInstance.collection('orcamentos').create(data, {
-      expand: 'user_id',
-    });
+    return pbInstance.collection('orcamentos').create(data, { expand: 'user_id' });
   }
 
   static async atualizarOrcamento(pbInstance: any, id: string, data: any): Promise<any> {
@@ -58,6 +69,10 @@ export class CalculosDataFetcher {
 
   static async listarUsuarios(pbInstance: any): Promise<any> {
     return pbInstance.collection('users').getFullList();
+  }
+
+  static async obterUsuarioPorId(pbInstance: any, id: string): Promise<any> {
+    return pbInstance.collection('users').getOne(id);
   }
 
   static async criarUsuario(pbInstance: any, data: any): Promise<any> {
