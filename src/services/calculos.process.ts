@@ -13,6 +13,7 @@ import {
   formatarMoeda, 
   TAXA_SEGURO, 
   TAXA_IMPOSTO, 
+  TAXA_MARGEM_SEGURANCA,
   MAX_LUCRO_LIQUIDO_PERMITIDO 
 } from '../utils/calculos.utils';
 
@@ -121,7 +122,8 @@ export class CalculosProcess {
       km,
       custo_km,
       porcentagem_imposto,
-      porcentagem_seguro
+      porcentagem_seguro,
+      porcentagem_margem_seguranca
     } = input;
 
     const taxaImposto = (porcentagem_imposto !== undefined && porcentagem_imposto !== null && !isNaN(porcentagem_imposto) && porcentagem_imposto >= 0)
@@ -131,6 +133,13 @@ export class CalculosProcess {
     const taxaSeguro = (porcentagem_seguro !== undefined && porcentagem_seguro !== null && !isNaN(porcentagem_seguro) && porcentagem_seguro >= 0)
       ? (porcentagem_seguro / 100)
       : TAXA_SEGURO;
+
+    const taxaMargemSeguranca = (porcentagem_margem_seguranca !== undefined && porcentagem_margem_seguranca !== null && !isNaN(porcentagem_margem_seguranca) && porcentagem_margem_seguranca >= 0)
+      ? (porcentagem_margem_seguranca / 100)
+      : TAXA_MARGEM_SEGURANCA;
+    if (taxaMargemSeguranca >= 1) {
+      throw new Error("A margem de segurança não pode ser igual ou superior a 100%.");
+    }
 
     const maxLucroPermitido = Number(((1 - taxaSeguro - taxaImposto) * 100 - 0.5).toFixed(2));
     if (porcentagemLucroLiquido > maxLucroPermitido) {
@@ -145,35 +154,53 @@ export class CalculosProcess {
       ? CalculosProcess.calcularValorHomologacao(quantidade_inversores, potencia_inversor)
       : (valorHomologacao || 500);
 
-    const custoDireto = valorKitLicenciado + valorMaoDeObraTotal + valorEquipamentoLocalTotal + valorHomologacaoReal + custoKmTotal;
-    const margemSeguranca = (valorKitLicenciado / 0.97) - valorKitLicenciado;
+    const custoDiretoSemKm = valorKitLicenciado + valorMaoDeObraTotal + valorEquipamentoLocalTotal + valorHomologacaoReal;
+    const custoDireto = custoDiretoSemKm + custoKmTotal;
+    // Reserva para imprevistos da execução, calculada "por dentro" sobre o custo direto (sem o km,
+    // que é repassado pelo valor de custo)
+    const margemSeguranca = (custoDiretoSemKm / (1 - taxaMargemSeguranca)) - custoDiretoSemKm;
     const divisor = 1 - (porcentagemLucroLiquido / 100) - taxaSeguro - taxaImposto;
 
     if (divisor <= 0) {
       throw new Error("A soma da margem de lucro líquido, seguro e imposto não pode ser igual ou superior a 100%.");
     }
 
-    const precoFinalSugerido = (custoDireto + margemSeguranca - (taxaImposto * valorKitLicenciado)) / divisor;
+    // O km é repassado ao cliente pelo valor de custo: soma direto no preço final, sem seguro, imposto ou lucro.
+    const precoBase = (custoDiretoSemKm + margemSeguranca - (taxaImposto * valorKitLicenciado)) / divisor;
+    const precoFinalSugerido = precoBase + custoKmTotal;
 
-    const seguro = precoFinalSugerido * taxaSeguro;
-    const lucroLiquidoRs = precoFinalSugerido * (porcentagemLucroLiquido / 100);
-    const imposto = (precoFinalSugerido - valorKitLicenciado) * taxaImposto;
-    const custoProjeto = precoFinalSugerido - lucroLiquidoRs;
+    // Cada parcela é arredondada e o custo do projeto é a soma delas; a sobra de centavos do
+    // arredondamento vai para o lucro, assim as parcelas exibidas somam exatamente o preço final.
+    const parcelas = [
+      valorKitLicenciado,
+      valorMaoDeObraTotal,
+      valorEquipamentoLocalTotal,
+      valorHomologacaoReal,
+      custoKmTotal,
+      margemSeguranca,
+      precoBase * taxaSeguro,
+      (precoBase - valorKitLicenciado) * taxaImposto,
+    ].map(formatarMoeda);
+    const [, , , , , margemSegurancaRs, seguro, imposto] = parcelas;
+    const precoFinalRs = formatarMoeda(precoFinalSugerido);
+    const custoProjeto = formatarMoeda(parcelas.reduce((soma, valor) => soma + valor, 0));
+    const lucroLiquidoRs = formatarMoeda(precoFinalRs - custoProjeto);
 
     return {
       custoDireto: formatarMoeda(custoDireto),
-      custoProjeto: formatarMoeda(custoProjeto),
-      margemSeguranca: formatarMoeda(margemSeguranca),
-      seguro: formatarMoeda(seguro),
-      lucroLiquidoRs: formatarMoeda(lucroLiquidoRs),
-      imposto: formatarMoeda(imposto),
-      precoFinalSugerido: formatarMoeda(precoFinalSugerido),
+      custoProjeto,
+      margemSeguranca: margemSegurancaRs,
+      seguro,
+      lucroLiquidoRs,
+      imposto,
+      precoFinalSugerido: precoFinalRs,
       valorMaoDeObraTotal: formatarMoeda(valorMaoDeObraTotal),
       valorEquipamentoLocalTotal: formatarMoeda(valorEquipamentoLocalTotal),
       valorHomologacaoCalculado: formatarMoeda(valorHomologacaoReal),
       custoKmTotal: formatarMoeda(custoKmTotal),
       porcentagem_imposto: formatarMoeda(taxaImposto * 100),
-      porcentagem_seguro: formatarMoeda(taxaSeguro * 100)
+      porcentagem_seguro: formatarMoeda(taxaSeguro * 100),
+      porcentagem_margem_seguranca: formatarMoeda(taxaMargemSeguranca * 100)
     };
   }
 

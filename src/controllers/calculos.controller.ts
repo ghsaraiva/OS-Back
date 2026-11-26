@@ -5,8 +5,28 @@ import { PdfService } from '../services/pdf.service';
 import { EmailService } from '../services/email.service';
 import pb, { authenticatePB } from '../config/pocketbase';
 
+// Campos que o usuário pode mandar ao criar uma solicitação; kit, preço e resultados de cálculo nunca vêm do cliente.
+const CAMPOS_SOLICITACAO = [
+  'nome_cliente', 'telefone_cliente', 'email_cliente', 'estado', 'cidade', 'id_cidade',
+  'consumo_mes', 'valor_tarifa', 'estrutura', 'padrao', 'observacao',
+] as const;
+// Custos operacionais: só associado (e admin) definem; para o vendedor valem os padrões do backend.
+const CAMPOS_CUSTOS = [
+  'mao_obra', 'equipamento_local', 'lucro_liquido_perc', 'km', 'custo_km', 'porcentagem_imposto', 'porcentagem_seguro',
+  'porcentagem_margem_seguranca',
+] as const;
+
 export class CalculosController {
   private pdfService = new PdfService();
+
+  /**
+   * A coleção orcamentos só é acessível ao admin no PocketBase. Para os demais perfis o backend
+   * lê e grava como superusuário, sempre depois de conferir perfil e dono do orçamento.
+   */
+  private async pbServidor() {
+    await authenticatePB();
+    return pb;
+  }
 
   dimensionamentoMinimo = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -29,12 +49,33 @@ export class CalculosController {
       const user_id = req.user?.id;
       const { nome_cliente, id_cidade, consumo_mes, valor_tarifa } = req.body;
       
-      if (!user_id || !nome_cliente || !id_cidade || !consumo_mes || !valor_tarifa) {
-        return res.status(400).json({ error: 'Campos obrigatórios: nome_cliente, id_cidade, consumo_mes, valor_tarifa' });
+      if (!user_id) {
+        return res.status(401).json({ error: 'Sessão inválida. Faça login novamente.' });
       }
 
-      const result = await calculosService.criarSolicitacaoInicial(req.pb!, { ...req.body, user_id });
-      return res.status(201).json(result);
+      const faltando = [
+        !nome_cliente && 'nome do cliente',
+        !id_cidade && 'cidade',
+        !(Number(consumo_mes) > 0) && 'consumo mensal (maior que zero)',
+        !(Number(valor_tarifa) > 0) && 'tarifa de energia (maior que zero)',
+      ].filter(Boolean);
+      if (faltando.length > 0) {
+        return res.status(400).json({ error: `Preencha: ${faltando.join(', ')}.` });
+      }
+
+      const podeDefinirCustos = req.user?.tipo_acesso === 'associado' || req.user?.tipo_acesso === 'admin';
+      const campos: readonly string[] = podeDefinirCustos ? [...CAMPOS_SOLICITACAO, ...CAMPOS_CUSTOS] : CAMPOS_SOLICITACAO;
+      const input = Object.fromEntries(campos.filter((c) => req.body[c] !== undefined).map((c) => [c, req.body[c]]));
+      if (input.porcentagem_margem_seguranca !== undefined) {
+        const margem = Number(input.porcentagem_margem_seguranca);
+        if (!Number.isFinite(margem) || margem < 0 || margem >= 100) {
+          return res.status(400).json({ error: 'A margem de segurança deve estar entre 0% e 100%.' });
+        }
+        input.porcentagem_margem_seguranca = margem;
+      }
+
+      const result = await calculosService.criarSolicitacaoInicial(await this.pbServidor(), { ...input, user_id } as any);
+      return res.status(201).json(calculosService.sanitizarOrcamento(result, req.user?.tipo_acesso));
     } catch (error: any) {
       next(error);
     }
@@ -118,7 +159,8 @@ export class CalculosController {
         km,
         custo_km,
         porcentagem_imposto,
-        porcentagem_seguro
+        porcentagem_seguro,
+        porcentagem_margem_seguranca
       } = req.body;
 
       if (
@@ -145,7 +187,8 @@ export class CalculosController {
         km: km !== undefined ? Number(km) : undefined,
         custo_km: custo_km !== undefined ? Number(custo_km) : undefined,
         porcentagem_imposto: porcentagem_imposto !== undefined ? Number(porcentagem_imposto) : undefined,
-        porcentagem_seguro: porcentagem_seguro !== undefined ? Number(porcentagem_seguro) : undefined
+        porcentagem_seguro: porcentagem_seguro !== undefined ? Number(porcentagem_seguro) : undefined,
+        porcentagem_margem_seguranca: porcentagem_margem_seguranca !== undefined ? Number(porcentagem_margem_seguranca) : undefined
       });
 
       return res.json(result);
@@ -172,21 +215,158 @@ export class CalculosController {
         data: result 
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message || 'Erro ao salvar refinamento' });
+      console.error('Erro detalhado em salvarRefinamento:', {
+        message: error?.message,
+        status: error?.status,
+        data: error?.response?.data || error?.data || error
+      });
+      res.status(500).json({ 
+        error: error.message || 'Erro ao salvar refinamento',
+        details: error?.response?.data || error?.data
+      });
+    }
+  };
+
+  private lerCustosAssociado(body: any): { input?: Record<string, number>; erro?: string } {
+    const campos = ['mao_obra', 'equipamento_local', 'km', 'custo_km', 'porcentagem_imposto', 'porcentagem_seguro', 'lucro_liquido_perc'] as const;
+    const input: Record<string, number> = {};
+    for (const campo of campos) {
+      const valor = Number(body[campo]);
+      if (body[campo] === undefined || body[campo] === null || !Number.isFinite(valor) || valor < 0) {
+        return { erro: `Campo inválido ou ausente: ${campo}` };
+      }
+      input[campo] = valor;
+    }
+    // Opcional: sem ela, vale a porcentagem já gravada no orçamento
+    if (body.porcentagem_margem_seguranca !== undefined && body.porcentagem_margem_seguranca !== null) {
+      const margem = Number(body.porcentagem_margem_seguranca);
+      if (!Number.isFinite(margem) || margem < 0 || margem >= 100) {
+        return { erro: 'Campo inválido: porcentagem_margem_seguranca' };
+      }
+      input.porcentagem_margem_seguranca = margem;
+    }
+    return { input };
+  }
+
+  private async obterOrcamentoDoAssociado(req: Request, res: Response) {
+    const orcamento = await calculosService.obterOrcamentoPorId(await this.pbServidor(), req.params.id as string);
+    if (!orcamento) {
+      res.status(404).json({ error: 'Orçamento não encontrado.' });
+      return null;
+    }
+    if (orcamento.user_id !== req.user?.id) {
+      res.status(403).json({ error: 'Acesso Proibido: Você só pode editar seus próprios orçamentos.' });
+      return null;
+    }
+    return orcamento;
+  }
+
+  private erroDeMargem(error: any) {
+    return error instanceof Error && (error.message.includes('limite máximo permitido') || error.message.includes('não pode ser igual ou superior'));
+  }
+
+  atualizarCustosAssociado = async (req: Request, res: Response) => {
+    try {
+      const { input, erro } = this.lerCustosAssociado(req.body);
+      if (erro) {
+        return res.status(400).json({ error: erro });
+      }
+
+      const orcamento = await this.obterOrcamentoDoAssociado(req, res);
+      if (!orcamento) return;
+
+      const result = await calculosService.atualizarCustosAssociado(await this.pbServidor(), orcamento, input as any);
+
+      return res.json(calculosService.sanitizarOrcamento(result, req.user?.tipo_acesso));
+    } catch (error: any) {
+      if (this.erroDeMargem(error)) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: error.message || 'Erro ao atualizar custos do orçamento' });
+    }
+  };
+
+  atualizarSolicitacaoAssociado = async (req: Request, res: Response) => {
+    try {
+      const { nome_cliente, telefone_cliente, email_cliente, id_cidade, observacao, estrutura, padrao, consumo_mes, valor_tarifa } = req.body;
+
+      const faltando = [
+        !nome_cliente && 'nome do cliente',
+        !id_cidade && 'cidade',
+        !estrutura && 'estrutura',
+        !padrao && 'padrão de entrada',
+        !(Number(consumo_mes) > 0) && 'consumo mensal (maior que zero)',
+        !(Number(valor_tarifa) > 0) && 'tarifa de energia (maior que zero)',
+      ].filter(Boolean);
+      if (faltando.length > 0) {
+        return res.status(400).json({ error: `Preencha: ${faltando.join(', ')}.` });
+      }
+
+      const { input: custos, erro } = this.lerCustosAssociado(req.body);
+      if (erro) {
+        return res.status(400).json({ error: erro });
+      }
+
+      const orcamento = await this.obterOrcamentoDoAssociado(req, res);
+      if (!orcamento) return;
+
+      // Só os campos da solicitação: nada de kit, preço ou dono vindo do corpo da requisição.
+      const dados = {
+        nome_cliente: String(nome_cliente).trim(),
+        telefone_cliente: telefone_cliente ? String(telefone_cliente) : '',
+        email_cliente: email_cliente ? String(email_cliente).trim() : '',
+        id_cidade: String(id_cidade),
+        observacao: observacao ? String(observacao) : '',
+        estrutura: String(estrutura),
+        padrao: String(padrao),
+        consumo_mes: Number(consumo_mes),
+        valor_tarifa: Number(valor_tarifa),
+      };
+
+      const result = await calculosService.atualizarSolicitacaoAssociado(await this.pbServidor(), orcamento, dados, custos as any);
+
+      return res.json(calculosService.sanitizarOrcamento(result, req.user?.tipo_acesso));
+    } catch (error: any) {
+      if (this.erroDeMargem(error)) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: error.message || 'Erro ao atualizar a solicitação' });
     }
   };
 
   atualizarPrecoVenda = async (req: Request, res: Response) => {
     try {
-      const id = req.params.id as string;
-      const { preco_final_venda } = req.body;
+      const tipoAcesso = req.user?.tipo_acesso;
+      if (tipoAcesso !== 'admin' && tipoAcesso !== 'associado') {
+        return res.status(403).json({ error: 'Acesso Proibido: Você não tem permissão para editar o preço de venda.' });
+      }
 
-      if (!id || preco_final_venda === undefined || preco_final_venda <= 0) {
+      const id = req.params.id as string;
+      const preco_final_venda = Number(req.body.preco_final_venda);
+
+      if (!id || !Number.isFinite(preco_final_venda) || preco_final_venda <= 0) {
         return res.status(400).json({ error: 'ID do orçamento e preco_final_venda (maior que zero) são obrigatórios.' });
       }
 
-      const result = await calculosService.atualizarPrecoVenda(req.pb!, id, preco_final_venda);
-      return res.json(result);
+      const pb = await this.pbServidor();
+      const orcamento = await calculosService.obterOrcamentoPorId(pb, id);
+      if (!orcamento) {
+        return res.status(404).json({ error: 'Orçamento não encontrado.' });
+      }
+
+      if (tipoAcesso === 'associado') {
+        if (orcamento.user_id !== req.user?.id) {
+          return res.status(403).json({ error: 'Acesso Proibido: Você só pode editar seus próprios orçamentos.' });
+        }
+        if (!orcamento.valor_kit_final || orcamento.valor_kit_final <= 0) {
+          return res.status(400).json({ error: 'O preço de venda só pode ser alterado depois que o kit for precificado pela administração.' });
+        }
+      } else if (await calculosService.donoEhAssociado(pb, orcamento.user_id)) {
+        return res.status(403).json({ error: 'Acesso Proibido: O preço de venda de orçamentos de associados é definido pelo próprio associado.' });
+      }
+
+      const result = await calculosService.atualizarPrecoVenda(pb, id, preco_final_venda, tipoAcesso === 'associado');
+      return res.json(calculosService.sanitizarOrcamento(result, tipoAcesso));
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Erro ao atualizar preço de venda' });
     }
@@ -206,7 +386,7 @@ export class CalculosController {
       const userId = req.user?.id;
       const isAdmin = req.user?.tipo_acesso === 'admin';
 
-      const result = await calculosService.obterMetricasDashboard(req.pb!, userId, isAdmin);
+      const result = await calculosService.obterMetricasDashboard(await this.pbServidor(), userId, isAdmin);
       return res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Erro ao obter estatísticas do dashboard' });
@@ -229,7 +409,19 @@ export class CalculosController {
     try {
       const userId = req.user?.id;
       const isAdmin = req.user?.tipo_acesso === 'admin';
-      const result = await calculosService.listarTodosOrcamentos(req.pb!, userId, isAdmin);
+      const result = await calculosService.listarTodosOrcamentos(await this.pbServidor(), userId, isAdmin);
+
+      if (!isAdmin) {
+        if (Array.isArray(result)) {
+          return res.json(result.map(o => calculosService.sanitizarOrcamento(o, req.user?.tipo_acesso)));
+        } else if (result && Array.isArray(result.items)) {
+          return res.json({
+            ...result,
+            items: result.items.map((o: any) => calculosService.sanitizarOrcamento(o, req.user?.tipo_acesso))
+          });
+        }
+      }
+
       return res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Erro ao listar orçamentos' });
@@ -259,8 +451,17 @@ export class CalculosController {
   obterOrcamento = async (req: Request, res: Response) => {
     try {
       const id = req.params.id as string;
-      const result = await calculosService.obterOrcamentoPorId(req.pb!, id);
-      return res.json(result);
+      const result = await calculosService.obterOrcamentoPorId(await this.pbServidor(), id);
+      if (!result) {
+        return res.status(404).json({ error: 'Orçamento não encontrado.' });
+      }
+
+      const isAdmin = req.user?.tipo_acesso === 'admin';
+      if (!isAdmin && result.user_id !== req.user?.id) {
+        return res.status(403).json({ error: 'Acesso Proibido: Você só tem permissão para visualizar seus próprios orçamentos.' });
+      }
+
+      return res.json(calculosService.sanitizarOrcamento(result, req.user?.tipo_acesso));
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Erro ao obter orçamento' });
     }
@@ -269,8 +470,23 @@ export class CalculosController {
   atualizarOrcamento = async (req: Request, res: Response) => {
     try {
       const id = req.params.id as string;
-      const result = await calculosService.atualizarOrcamentoParcial(req.pb!, id, req.body);
-      return res.json(result);
+
+      // Rota genérica usada só para salvar o e-mail do cliente; as demais alterações têm rotas próprias.
+      if (typeof req.body?.email_cliente !== 'string' || Object.keys(req.body).length !== 1) {
+        return res.status(400).json({ error: 'Só o campo email_cliente pode ser alterado por esta rota.' });
+      }
+
+      const pb = await this.pbServidor();
+      const orcamento = await calculosService.obterOrcamentoPorId(pb, id);
+      if (!orcamento) {
+        return res.status(404).json({ error: 'Orçamento não encontrado.' });
+      }
+      if (req.user?.tipo_acesso !== 'admin' && orcamento.user_id !== req.user?.id) {
+        return res.status(403).json({ error: 'Acesso Proibido: Você só pode editar seus próprios orçamentos.' });
+      }
+
+      const result = await calculosService.atualizarOrcamentoParcial(pb, id, { email_cliente: req.body.email_cliente.trim() });
+      return res.json(calculosService.sanitizarOrcamento(result, req.user?.tipo_acesso));
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Erro ao atualizar orçamento' });
     }
@@ -289,7 +505,7 @@ export class CalculosController {
           toEmail: req.body.email,
           userName: req.body.name || 'Colaborador',
           tempPassword: req.body.password,
-          tipoAcesso: req.body.tipo_acesso === 'admin' ? 'Administrador' : 'Vendedor',
+          tipoAcesso: req.body.tipo_acesso === 'admin' ? 'Administrador' : req.body.tipo_acesso === 'associado' ? 'Associado' : 'Vendedor',
         }).catch(() => {});
       }
 
@@ -360,9 +576,19 @@ export class CalculosController {
         return res.status(400).json({ error: 'ID do orçamento é obrigatório.' });
       }
 
-      const orcamento = await calculosService.obterOrcamentoPorId(req.pb!, id);
+      const pb = await this.pbServidor();
+      const orcamento = await calculosService.obterOrcamentoPorId(pb, id);
       if (!orcamento) {
         return res.status(404).json({ error: 'Orçamento não encontrado.' });
+      }
+
+      const isAdmin = req.user?.tipo_acesso === 'admin';
+      if (!isAdmin && orcamento.user_id !== req.user?.id) {
+        return res.status(403).json({ error: 'Acesso Proibido: Você só tem permissão para gerar proposta dos seus próprios orçamentos.' });
+      }
+
+      if (!orcamento.valor_kit_final || orcamento.valor_kit_final <= 0) {
+        return res.status(400).json({ error: 'A proposta comercial ainda não pode ser gerada. O kit solar aguarda cotação e aprovação da administração.' });
       }
 
       const pdfBuffer = await PdfService.gerarPdfProposta(orcamento);
@@ -383,7 +609,7 @@ export class CalculosController {
 
       // Update record in PocketBase using plain object and File
       const pdfFile = new File([new Uint8Array(pdfBuffer)], nomeArquivo, { type: 'application/pdf' });
-      const updatedRecord = await req.pb!.collection('orcamentos').update(id, {
+      const updatedRecord = await pb.collection('orcamentos').update(id, {
         pdf_proposta: pdfFile
       });
 
@@ -408,14 +634,27 @@ export class CalculosController {
         return res.status(400).json({ error: 'Informe um e-mail de destino válido.' });
       }
 
+      if (budgetId) {
+        const orcamento = await calculosService.obterOrcamentoPorId(await this.pbServidor(), budgetId);
+        if (orcamento) {
+          const isAdmin = req.user?.tipo_acesso === 'admin';
+          if (!isAdmin && orcamento.user_id !== req.user?.id) {
+            return res.status(403).json({ error: 'Acesso Proibido: Você só tem permissão para enviar propostas dos seus próprios orçamentos.' });
+          }
+          if (!orcamento.valor_kit_final || orcamento.valor_kit_final <= 0) {
+            return res.status(400).json({ error: 'A proposta comercial não pode ser enviada enquanto o kit aguardar cotação da administração.' });
+          }
+        }
+      }
+
       // Baixa o PDF direto do PocketBase interno (autenticado) para evitar 404 da URL pública
       let pdfBuffer: Buffer | undefined;
       if (budgetId && pdfFilename) {
         try {
           const pbBaseUrl = (process.env.POCKETBASE_URL || 'http://127.0.0.1:8090').replace(/\/$/, '');
           const internalPdfUrl = `${pbBaseUrl}/api/files/orcamentos/${budgetId}/${pdfFilename}`;
-          // Usa o token do usuário autenticado na requisição atual
-          const pbToken = req.pb?.authStore?.token;
+          // Token do superusuário: o arquivo é da coleção orcamentos, que só o admin acessa direto
+          const pbToken = (await this.pbServidor()).authStore.token;
           const headers: Record<string, string> = {};
           if (pbToken) headers['Authorization'] = pbToken;
           const response = await axios.get(internalPdfUrl, { responseType: 'arraybuffer', headers });
